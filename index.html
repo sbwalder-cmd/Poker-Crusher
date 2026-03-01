@@ -3741,6 +3741,14 @@
 
         // Animated table sequence — positions the seats instantly, then plays the action animation
         function runTableAnimation(heroPos, oppPos, scenario, onDone) {
+            // Prevent overlapping animations from leaving duplicate chips/bets on screen.
+            // If a new round starts while an old animation is mid-flight, the old one becomes "stale"
+            // and all pending async steps abort.
+            window.__tableAnimToken = (window.__tableAnimToken || 0) + 1;
+            const _animToken = window.__tableAnimToken;
+            const STALE = Symbol('tableAnimStale');
+            const isStale = () => _animToken !== window.__tableAnimToken;
+
             const heroIdx = TABLE_ORDER.indexOf(heroPos);
             const btnEl = document.getElementById('dealer-button');
             const betsLayer = document.getElementById('bets-layer');
@@ -3768,9 +3776,10 @@
                 }
             });
 
-            const delay = (ms) => new Promise(r => setTimeout(r, ms));
+            const delay = (ms) => new Promise(r => setTimeout(r, ms)).then(() => { if (isStale()) throw STALE; });
 
             async function animate() {
+                try {
                 // Step 1: Deal cards to all seats with stagger
                 TABLE_ORDER.forEach((pos, i) => {
                     const coords = getSeatCoords(heroPos, pos);
@@ -4058,6 +4067,10 @@
                 }
 
                 onDone();
+                } catch (e) {
+                    if (e === STALE) return; // silently abort stale animations
+                    console.error(e);
+                }
             }
 
             animate();
