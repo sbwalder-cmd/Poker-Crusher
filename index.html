@@ -375,6 +375,10 @@
             <button onclick="showConfigMenu()" class="w-full py-5 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-2xl font-black text-xl transition-all shadow-lg">
                 TRAIN NOW
             </button>
+
+            <button onclick="showChallengeMenu()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] rounded-2xl font-black text-base transition-all shadow-lg flex items-center justify-center gap-2">
+                <span>🏆</span><span>CHALLENGE MODE</span>
+            </button>
             <button onclick="showLibrary()" class="w-full py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-bold text-slate-300 transition-all flex items-center justify-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
                 STRATEGY LIBRARY
@@ -391,6 +395,36 @@
                 <button onclick="showSettings()" class="py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-bold text-slate-300 transition-all flex items-center justify-center gap-2 text-sm col-span-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v2"/><path d="M12 21v2"/><path d="M4.22 4.22l1.42 1.42"/><path d="M18.36 18.36l1.42 1.42"/><path d="M1 12h2"/><path d="M21 12h2"/><path d="M4.22 19.78l1.42-1.42"/><path d="M18.36 5.64l1.42-1.42"/><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.24.5.36 1.05.36 1.62v.76c0 .57-.12 1.12-.36 1.62Z"/></svg>
                     SETTINGS
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- CHALLENGE SCREEN -->
+    <div id="challenge-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-start overflow-y-auto">
+        <div class="w-full max-w-sm flex flex-col gap-5 pt-6 pb-12">
+            <div class="flex items-center justify-between">
+                <div class="text-left">
+                    <p class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-[0.25em]">Challenge Mode</p>
+                    <h2 class="text-2xl font-black tracking-tight">Unlock Path</h2>
+                </div>
+                <button onclick="closeChallengeMenu()" class="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold">Back</button>
+            </div>
+
+            <div class="bg-slate-900/40 border border-slate-800 rounded-2xl p-4">
+                <p class="text-[10px] text-slate-400 font-bold">How it works</p>
+                <p class="text-[11px] text-slate-500 mt-1 leading-snug">
+                    Beat a node by hitting the accuracy target over the required hands. Completing nodes unlocks the next ones.
+                    Your normal stats/SR still track everything — this is just a progression layer.
+                </p>
+            </div>
+
+            <div id="challenge-body" class="flex flex-col gap-3"></div>
+
+            <div class="pt-2">
+                <button onclick="resetChallengeProgress()" class="w-full py-3 bg-slate-900 border border-slate-800 rounded-2xl font-bold text-xs text-slate-500">
+                    Reset Challenge Progress
                 </button>
             </div>
         </div>
@@ -637,6 +671,26 @@
                     </button>
 
                     <input id="import-file" type="file" accept="application/json" class="hidden" />
+                </div>
+
+                <div class="mt-4 bg-slate-950/40 border border-slate-800 rounded-xl p-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <label class="flex items-center gap-2 text-[12px] font-black text-slate-200">
+                            <input id="cloud-autosave" type="checkbox" class="accent-emerald-500 w-4 h-4" onchange="saveCloudAutoPrefsFromUI()" />
+                            Auto-save
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Every</span>
+                            <select id="cloud-autosave-interval" class="bg-slate-900/60 border border-slate-700 rounded-lg px-2 py-2 text-[12px] font-black text-slate-200 outline-none" onchange="saveCloudAutoPrefsFromUI()">
+                                <option value="30000">30s</option>
+                                <option value="120000" selected>2m</option>
+                                <option value="300000">5m</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-[11px] text-slate-500 leading-relaxed">
+                        Auto-save runs silently in the background whenever your stats change (no popups). You still can manually Save/Load above.
+                    </div>
                 </div>
 
                 <div class="mt-4 text-[11px] text-slate-500 leading-relaxed">
@@ -2742,6 +2796,206 @@
             if (mode === 'focused') buildDrillConfig();
         }
 
+        // ==================================
+        // Challenge Mode (Unlock Path) - skeleton
+        // ==================================
+        function loadChallenge() {
+            try { const s = localStorage.getItem(profileKey('gto_challenge_v1')); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+        }
+        function saveChallenge(obj) {
+            try { localStorage.setItem(profileKey('gto_challenge_v1'), JSON.stringify(obj)); } catch(e) {}
+            markCloudDirty();
+        }
+
+        // Node definitions: keep this simple + stable. Uses existing training engine + SR stats.
+        // Each node maps to a focused drill (scenario + optional position restrictions).
+        const CHALLENGE_NODES = [
+            { id: 'n1_rfi_ep',    title: 'Open Ranges: EP',    desc: 'UTG/UTG1/UTG2 opens', scenario: 'RFI', positions: ['UTG','UTG1','UTG2'], hands: 25, acc: 80, prereq: [] },
+            { id: 'n2_rfi_mp',    title: 'Open Ranges: MP',    desc: 'LJ/HJ opens',         scenario: 'RFI', positions: ['LJ','HJ'],       hands: 25, acc: 80, prereq: ['n1_rfi_ep'] },
+            { id: 'n3_rfi_lp',    title: 'Open Ranges: LP',    desc: 'CO/BTN opens',        scenario: 'RFI', positions: ['CO','BTN'],      hands: 25, acc: 80, prereq: ['n2_rfi_mp'] },
+            { id: 'n4_rfi_blinds',title: 'Open Ranges: Blinds',desc: 'SB opens',            scenario: 'RFI', positions: ['SB'],           hands: 25, acc: 80, prereq: ['n3_rfi_lp'] },
+
+            { id: 'n5_def_blinds',title: 'Defend vs RFI: Blinds', desc: 'SB/BB defending',  scenario: 'FACING_RFI', positions: ['SB','BB'], hands: 25, acc: 78, prereq: ['n4_rfi_blinds'] },
+            { id: 'n6_vs3b_ip',   title: 'RFI vs 3-bet: IP',   desc: 'CO/BTN vs 3-bet',     scenario: 'RFI_VS_3BET', positions: ['CO','BTN'], hands: 25, acc: 75, prereq: ['n5_def_blinds'] },
+            { id: 'n7_vs3b_oop',  title: 'RFI vs 3-bet: OOP',  desc: 'SB vs 3-bet',         scenario: 'RFI_VS_3BET', positions: ['SB'],     hands: 25, acc: 75, prereq: ['n6_vs3b_ip'] },
+
+            { id: 'n8_vs_limp',   title: 'Vs Limpers',         desc: '1 limper baseline',   scenario: 'VS_LIMP', positions: [...ALL_POSITIONS], hands: 25, acc: 75, prereq: ['n7_vs3b_oop'], limperBucket: '1L' },
+            { id: 'n9_squeeze',   title: 'Squeeze',            desc: 'Open + call',          scenario: 'SQUEEZE', positions: ['BTN','SB','BB','CO'], hands: 25, acc: 72, prereq: ['n8_vs_limp'] }
+        ];
+
+        // Runtime state for an active challenge attempt
+        let challengeState = { active: false, nodeId: null, reqAcc: 0 };
+
+        function getChallengeProgress() {
+            const saved = loadChallenge();
+            if (saved && saved.v === 1 && saved.nodes) return saved;
+            // Default: only first node unlocked (computed), none completed
+            return { v: 1, nodes: {}, lastPlayed: null };
+        }
+
+        function isNodeCompleted(progress, nodeId) {
+            return !!(progress.nodes && progress.nodes[nodeId] && progress.nodes[nodeId].completed);
+        }
+
+        function isNodeUnlocked(progress, node) {
+            if (!node.prereq || node.prereq.length === 0) return true;
+            return node.prereq.every(pid => isNodeCompleted(progress, pid));
+        }
+
+        function renderChallengeScreen() {
+            const progress = getChallengeProgress();
+            const body = document.getElementById('challenge-body');
+            if (!body) return;
+
+            const rows = CHALLENGE_NODES.map(node => {
+                const done = isNodeCompleted(progress, node.id);
+                const unlocked = isNodeUnlocked(progress, node);
+                const rec = progress.nodes[node.id] || {};
+                const best = rec.bestAcc != null ? rec.bestAcc : null;
+
+                const badge = done
+                    ? `<span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[9px] font-black uppercase tracking-wider">Completed</span>`
+                    : unlocked
+                        ? `<span class="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 text-[9px] font-black uppercase tracking-wider">Unlocked</span>`
+                        : `<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-500 text-[9px] font-black uppercase tracking-wider">Locked</span>`;
+
+                const bestHtml = best != null
+                    ? `<span class="text-[10px] text-slate-500">Best: <span class="text-slate-300 font-black">${best}%</span></span>`
+                    : `<span class="text-[10px] text-slate-600">Best: —</span>`;
+
+                const btn = unlocked
+                    ? `<button onclick="startChallengeNode('${node.id}')" class="px-3 py-2 rounded-xl ${done ? 'bg-slate-900 border border-slate-800 text-slate-300' : 'bg-emerald-600 hover:bg-emerald-500 text-white'} text-xs font-black">${done ? 'Replay' : 'Start'}</button>`
+                    : `<button disabled class="px-3 py-2 rounded-xl bg-slate-900 border border-slate-900 text-slate-700 text-xs font-black cursor-not-allowed">Locked</button>`;
+
+                return `<div class="bg-slate-900/40 border border-slate-800 rounded-2xl p-4 flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                            <p class="text-sm font-black text-slate-100 truncate">${node.title}</p>
+                            ${badge}
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-1">${node.desc}</p>
+                        <div class="flex items-center gap-3 mt-2">
+                            <span class="text-[10px] text-slate-600 font-bold uppercase tracking-wider">${node.hands} hands · ${node.acc}%+</span>
+                            ${bestHtml}
+                        </div>
+                    </div>
+                    <div class="shrink-0">${btn}</div>
+                </div>`;
+            }).join('');
+
+            body.innerHTML = rows;
+        }
+
+        function showChallengeMenu() {
+            document.getElementById('menu-screen').classList.add('hidden');
+            document.getElementById('challenge-screen').classList.remove('hidden');
+            renderChallengeScreen();
+        }
+
+        function closeChallengeMenu() {
+            document.getElementById('challenge-screen').classList.add('hidden');
+            document.getElementById('menu-screen').classList.remove('hidden');
+            // Safety: if a drill is running behind the menu (shouldn't happen), hide trainer to prevent layout scatter
+            const ts = document.getElementById('trainer-screen');
+            if (ts && !ts.classList.contains('hidden') && (challengeState && challengeState.active)) {
+                ts.classList.add('hidden');
+                drillState.active = false;
+                challengeState.active = false;
+            }
+            updateMenuUI();
+        }
+
+        function resetChallengeProgress() {
+            if (!confirm('Reset Challenge Mode progress?')) return;
+            saveChallenge({ v: 1, nodes: {}, lastPlayed: null });
+            renderChallengeScreen();
+        }
+
+        function startChallengeNode(nodeId) {
+            const node = CHALLENGE_NODES.find(n => n.id === nodeId);
+            if (!node) return;
+
+            // Configure a focused drill using the existing engine
+            setDrillMode('focused');
+            drillState.scenario = node.scenario;
+            drillState.positions = node.positions ? [...node.positions] : [...ALL_POSITIONS];
+            setDrillCount(node.hands);
+
+            // Extra per-node params (e.g., limper bucket)
+            if (node.scenario === 'VS_LIMP' && node.limperBucket) {
+                state.limperBucket = node.limperBucket;
+            }
+
+            // Mark active challenge run
+            challengeState.active = true;
+            challengeState.nodeId = node.id;
+            challengeState.reqAcc = node.acc;
+
+            const progress = getChallengeProgress();
+            progress.lastPlayed = node.id;
+            saveChallenge(progress);
+
+            // Hide Challenge UI and start training
+            document.getElementById('challenge-screen').classList.add('hidden');
+            startConfiguredTraining();
+        }
+
+        function finishChallengeAttempt(passed, accuracy) {
+            const progress = getChallengeProgress();
+            const nodeId = challengeState.nodeId;
+            const rec = progress.nodes[nodeId] || {};
+            rec.bestAcc = Math.max(rec.bestAcc || 0, accuracy || 0);
+            if (passed) {
+                rec.completed = true;
+                rec.completedAt = Date.now();
+            }
+            progress.nodes[nodeId] = rec;
+            saveChallenge(progress);
+        }
+
+        function exitToChallenge() {
+            // Restore config if drill was active
+            if (drillState._savedConfig) {
+                state.config = drillState._savedConfig;
+                drillState._savedConfig = null;
+            }
+            drillState.active = false;
+
+            document.getElementById('trainer-screen').classList.add('hidden');
+            document.getElementById('challenge-screen').classList.remove('hidden');
+            renderChallengeScreen();
+        }
+
+        
+        function endChallengeToMenu() {
+            // Restore config if drill was active
+            if (drillState._savedConfig) {
+                state.config = drillState._savedConfig;
+                drillState._savedConfig = null;
+            }
+            drillState.active = false;
+            challengeState.active = false;
+            document.getElementById('trainer-screen').classList.add('hidden');
+            document.getElementById('drill-complete-screen').classList.add('hidden');
+            document.getElementById('challenge-screen').classList.add('hidden');
+            document.getElementById('menu-screen').classList.remove('hidden');
+            updateMenuUI();
+        }
+
+function retryChallenge() {
+            const nodeId = challengeState.nodeId;
+            // Close complete screen, then restart same node
+            closeDrillCompleteScreenOnly();
+            setTimeout(() => startChallengeNode(nodeId), 50);
+        }
+
+        function closeDrillCompleteScreenOnly() {
+            document.getElementById('drill-complete-screen').classList.add('hidden');
+        }
+
+
+
+
         function setLimperMix(preset) {
             limperMixPreset = preset;
             saveLimperMix();
@@ -2874,6 +3128,78 @@
             const total = state.sessionStats.total;
             const correct = state.sessionStats.correct;
             const accuracy = total ? Math.round(correct / total * 100) : 0;
+
+            const isChallenge = (typeof challengeState !== 'undefined' && challengeState && challengeState.active);
+
+            // === CHALLENGE MODE COMPLETE ===
+            if (isChallenge) {
+                const node = (typeof CHALLENGE_NODES !== 'undefined')
+                    ? CHALLENGE_NODES.find(n => n.id === challengeState.nodeId)
+                    : null;
+
+                const req = node ? node.acc : (challengeState.reqAcc || 0);
+                const passed = accuracy >= req;
+
+                try { finishChallengeAttempt(passed, accuracy); } catch(e) {}
+
+                const statusIcon = passed ? '✅' : '❌';
+                const statusText = passed ? 'Passed' : 'Not yet';
+                const statusColor = passed ? 'text-emerald-400' : 'text-rose-400';
+                const accColor = accuracy >= req ? 'text-emerald-400' : accuracy >= (req - 5) ? 'text-yellow-400' : 'text-rose-400';
+
+                let html = `
+                    <div class="text-center mb-2">
+                        <p class="text-emerald-400/80 font-bold uppercase tracking-[0.2em] text-xs mb-3">Challenge Complete</p>
+                        <p class="text-xl font-black text-white">${node ? node.title : 'Challenge'}</p>
+                        <p class="text-[11px] text-slate-500 mt-1">${node ? node.desc : ''}</p>
+                    </div>
+
+                    <div class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col items-center gap-3">
+                        <div class="text-5xl">${statusIcon}</div>
+                        <p class="text-lg font-black ${statusColor}">${statusText}</p>
+                        <div class="w-full bg-slate-950/50 border border-slate-800 rounded-xl p-3 text-center">
+                            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Target</p>
+                            <p class="text-sm font-black text-slate-200 mt-1">${total} hands · ${req}%+ accuracy</p>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-4 w-full mt-2">
+                            <div class="text-center">
+                                <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Accuracy</p>
+                                <p class="text-2xl font-black ${accColor}">${accuracy}%</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Correct</p>
+                                <p class="text-2xl font-black text-white">${correct}</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Needed</p>
+                                <p class="text-2xl font-black text-slate-200">${Math.max(0, Math.ceil(req/100*total) - correct)}</p>
+                            </div>
+                        </div>
+
+                        ${passed ? `
+                            <div class="w-full mt-1 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
+                                <p class="text-[11px] text-emerald-300 text-center font-bold">Node unlocked ✅</p>
+                            </div>
+                        ` : `
+                            <div class="w-full mt-1 bg-rose-500/10 border border-rose-500/20 rounded-xl p-3">
+                                <p class="text-[11px] text-rose-300 text-center font-bold">Retry to unlock the next node</p>
+                            </div>
+                        `}
+                    </div>
+
+                    <div class="flex flex-col gap-3 w-full mt-2">
+                        <button onclick="closeDrillComplete()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-black text-lg transition-all">Back to Challenge</button>
+                        <button onclick="retryChallenge()" class="w-full py-4 bg-slate-900 border border-slate-800 rounded-2xl font-black text-sm text-slate-300">Retry</button>
+                        <button onclick="endChallengeToMenu()" class="w-full py-4 bg-slate-900 border border-slate-800 rounded-2xl font-bold text-sm text-slate-500">Main Menu</button>
+                    </div>`;
+
+                document.getElementById('drill-complete-body').innerHTML = html;
+                document.getElementById('drill-complete-screen').classList.remove('hidden');
+                return;
+            }
+
+            // === NORMAL DRILL COMPLETE ===
             const medal = getMedalForResult(total, accuracy);
 
             // Save medal if it's an upgrade
@@ -2920,6 +3246,7 @@
                             <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Best Streak</p>
                             <p class="text-2xl font-black text-orange-400">${state.global.bestStreak || 0}</p>
                         </div>
+
                     </div>
 
                     ${medal === 'none' ? `
@@ -2946,14 +3273,18 @@
             document.getElementById('drill-complete-screen').classList.remove('hidden');
         }
 
-        function continueDrill() {
-            document.getElementById('drill-complete-screen').classList.add('hidden');
-            drillState.handCount += 25; // extend
-            updateDrillCounter();
-            generateNextRound();
-        }
+
         function closeDrillComplete() {
             document.getElementById('drill-complete-screen').classList.add('hidden');
+
+            // If we just finished a challenge, go back to Challenge screen (not Menu)
+            if (typeof challengeState !== 'undefined' && challengeState && challengeState.active) {
+                // Keep nodeId around for the Challenge screen, but end the active run
+                challengeState.active = false;
+                exitToChallenge();
+                return;
+            }
+
             if (drillState._savedConfig) {
                 state.config = drillState._savedConfig;
                 drillState._savedConfig = null;
@@ -2962,7 +3293,6 @@
             exitToMenu();
         }
 
-        // --- LIBRARY LOGIC ---
 
         function showLibrary() {
             document.getElementById('library-screen').classList.remove('hidden');
@@ -4569,7 +4899,7 @@ function renderButtons(hidden) {
             container.innerHTML = '';
         }
 
-        function showConfigMenu() { document.getElementById('config-screen').classList.remove('hidden'); setDrillMode(drillState.mode); updateConfigUI(); }
+        function showConfigMenu() { document.getElementById('config-screen').classList.remove('hidden'); hydrateCloudUI(); hydrateCloudAutoUI(); setDrillMode(drillState.mode); updateConfigUI(); }
         function hideConfigMenu() { document.getElementById('config-screen').classList.add('hidden'); }
         let _chartIsReview = false;
         function closeChart() { document.getElementById('chart-modal').classList.add('hidden'); if (document.getElementById('trainer-screen').classList.contains('hidden')) return; if (!_chartIsReview) { if (!checkDrillComplete()) generateNextRound(); } _chartIsReview = false; }
@@ -4589,6 +4919,9 @@ function renderButtons(hidden) {
 
             document.getElementById('menu-screen').classList.add('hidden');
             document.getElementById('config-screen').classList.add('hidden');
+            // Safety: if Challenge overlay is open, close it
+            const ch = document.getElementById('challenge-screen');
+            if (ch) ch.classList.add('hidden');
             document.getElementById('trainer-screen').classList.remove('hidden');
             updateUI();
             updateDrillCounter();
@@ -4605,7 +4938,7 @@ function renderButtons(hidden) {
             document.getElementById('menu-screen').classList.remove('hidden');
             updateMenuUI();
         }
-        function saveProgress() { localStorage.setItem(profileKey('gto_rfi_stats_v2'), JSON.stringify(state.global)); SR.save(); }
+        function saveProgress() { localStorage.setItem(profileKey('gto_rfi_stats_v2'), JSON.stringify(state.global)); SR.save(); markCloudDirty(); }
         function loadProgress() { const s = localStorage.getItem(profileKey('gto_rfi_stats_v2')); if (s) state.global = JSON.parse(s); if (!state.global.byScenario) state.global.byScenario = {}; if (!state.global.byPos) state.global.byPos = {}; if (!state.global.byPosGroup) state.global.byPosGroup = {}; if (!state.global.bestStreak) state.global.bestStreak = 0; if (!state.global.bySpot) state.global.bySpot = {}; if (!state.global.byHand) state.global.byHand = {}; loadConfig(); loadLimperMix(); SR.load(); updateMenuUI(); if (window.RANGE_VALIDATE) { validateAndNormalizeRanges(facingRfiRanges); validateAndNormalizeRanges(rfiVs3BetRanges); validateAndNormalizeRanges(allFacingLimps); } }
         function updateUI() { document.getElementById('accuracy').innerText = (state.sessionStats.total ? Math.round(state.sessionStats.correct/state.sessionStats.total*100) : 0) + '%'; document.getElementById('streak').innerText = state.sessionStats.streak; updateDrillCounter(); }
         function updateMenuUI() {
@@ -5039,7 +5372,7 @@ function renderButtons(hidden) {
             };
         })();
 
-        window.onload = loadProgress;
+        window.onload = function(){ loadProgress(); startCloudAutosaveLoop(false); };
         function showUserStats() {
             renderUserStats();
             document.getElementById('stats-screen').classList.remove('hidden');
@@ -5082,7 +5415,7 @@ function renderButtons(hidden) {
             // If user sets a profile for the first time, copy existing Guest keys into profile namespace
             // (so they don’t "lose" progress when switching to username).
             if (!p) return;
-            const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
+            const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix', 'gto_challenge_v1'];
             baseKeys.forEach(k => {
                 const namespaced = `${k}__pc_${p}`;
                 try {
@@ -5248,6 +5581,9 @@ function renderButtons(hidden) {
         // For a real public product, you'd add proper auth + rules.
 
         const PC_CLOUD_SETTINGS_KEY = 'pc_cloud_settings_v1';
+        const PC_CLOUD_AUTOSAVE_KEY = 'pc_cloud_autosave_v1';
+        const PC_CLOUD_AUTOSAVE_INTERVAL_KEY = 'pc_cloud_autosave_interval_ms_v1';
+
 
         // Paste your config here (leave as null until you set it)
         const firebaseConfig = {
@@ -5260,15 +5596,15 @@ function renderButtons(hidden) {
 };
 
         let _pcFirebaseInited = false;
-        function initCloud() {
+        function initCloud(silent=false) {
             if (_pcFirebaseInited) return true;
             if (!firebaseConfig) {
-                showToast('Cloud sync not set up (missing Firebase config)', 'incorrect', 2200);
+                if(!silent) showToast('Cloud sync not set up (missing Firebase config)', 'incorrect', 2200);
                 return false;
             }
             try {
                 if (!window.firebase || !firebase.initializeApp) {
-                    showToast('Cloud sync failed (Firebase SDK not loaded)', 'incorrect', 2200);
+                    if(!silent) showToast('Cloud sync failed (Firebase SDK not loaded)', 'incorrect', 2200);
                     return false;
                 }
                 // Avoid duplicate init
@@ -5279,7 +5615,7 @@ function renderButtons(hidden) {
                 return true;
             } catch (e) {
                 console.warn('Firebase init error:', e);
-                showToast('Cloud sync init failed', 'incorrect', 2200);
+                if(!silent) showToast('Cloud sync init failed', 'incorrect', 2200);
                 return false;
             }
         }
@@ -5301,6 +5637,116 @@ function renderButtons(hidden) {
             if (u && typeof cs.username === 'string') u.value = cs.username;
             if (c && typeof cs.code === 'string') c.value = cs.code;
         }
+
+        
+        function getCloudAutoPrefs() {
+            let enabled = true;
+            let intervalMs = 120000;
+            try {
+                const e = localStorage.getItem(PC_CLOUD_AUTOSAVE_KEY);
+                if (e !== null) enabled = (e === '1');
+                const iv = parseInt(localStorage.getItem(PC_CLOUD_AUTOSAVE_INTERVAL_KEY) || '120000', 10);
+                if (!Number.isNaN(iv) && iv >= 15000) intervalMs = iv;
+            } catch(e) {}
+            return { enabled, intervalMs };
+        }
+
+        function setCloudAutoPrefs(prefs) {
+            try {
+                if (typeof prefs.enabled === 'boolean') localStorage.setItem(PC_CLOUD_AUTOSAVE_KEY, prefs.enabled ? '1' : '0');
+                if (typeof prefs.intervalMs === 'number') localStorage.setItem(PC_CLOUD_AUTOSAVE_INTERVAL_KEY, String(prefs.intervalMs));
+            } catch(e) {}
+        }
+
+        function hydrateCloudAutoUI() {
+            const prefs = getCloudAutoPrefs();
+            const cb = document.getElementById('cloud-autosave');
+            const sel = document.getElementById('cloud-autosave-interval');
+            if (cb) cb.checked = !!prefs.enabled;
+            if (sel) {
+                // If current value not in list, keep default but still display nearest
+                const want = String(prefs.intervalMs);
+                const opt = Array.from(sel.options || []).find(o => o.value === want);
+                if (opt) sel.value = want;
+            }
+        }
+
+        function saveCloudAutoPrefsFromUI() {
+            const cb = document.getElementById('cloud-autosave');
+            const sel = document.getElementById('cloud-autosave-interval');
+            const enabled = cb ? !!cb.checked : true;
+            const intervalMs = sel ? parseInt(sel.value || '120000', 10) : 120000;
+            setCloudAutoPrefs({ enabled, intervalMs: Number.isNaN(intervalMs) ? 120000 : intervalMs });
+            // Restart loop with new settings (safe)
+            startCloudAutosaveLoop(true);
+        }
+
+        // -------- Auto-save engine (silent) --------
+        let _pcCloudDirty = false;
+        let _pcCloudAutosaveTimer = null;
+        let _pcCloudLastAutosaveAt = 0;
+        let _pcCloudAutosaveInFlight = false;
+
+        function markCloudDirty() {
+            _pcCloudDirty = true;
+        }
+
+        async function cloudSaveSilent() {
+            // Uses stored settings; no UI required; no toasts.
+            const cs = loadCloudSettings();
+            const username = (cs && cs.username) ? String(cs.username) : '';
+            const code = (cs && cs.code) ? String(cs.code) : '';
+
+            if (!username) return false;
+            if (!initCloud(true)) return false;
+
+            const docId = await getCloudDocId(username, code);
+            if (!docId) return false;
+
+            const payload = buildTrainerPayloadForSync();
+            payload.cloudSavedAt = new Date().toISOString();
+
+            try {
+                const db = firebase.firestore();
+                await db.collection('pokercrusher_sync').doc(docId).set(payload, { merge: false });
+                try { localStorage.setItem('pc_last_cloud_autosave_at', new Date().toISOString()); } catch(e) {}
+                return true;
+            } catch (e) {
+                console.warn('Cloud autosave error:', e);
+                return false;
+            }
+        }
+
+        function startCloudAutosaveLoop(forceRestart=false) {
+            const prefs = getCloudAutoPrefs();
+            if (!prefs.enabled) {
+                if (_pcCloudAutosaveTimer) { clearInterval(_pcCloudAutosaveTimer); _pcCloudAutosaveTimer = null; }
+                return;
+            }
+            if (_pcCloudAutosaveTimer && !forceRestart) return;
+            if (_pcCloudAutosaveTimer) { clearInterval(_pcCloudAutosaveTimer); _pcCloudAutosaveTimer = null; }
+
+            _pcCloudAutosaveTimer = setInterval(async () => {
+                try {
+                    if (!_pcCloudDirty) return;
+                    if (_pcCloudAutosaveInFlight) return;
+                    const now = Date.now();
+                    if (now - _pcCloudLastAutosaveAt < prefs.intervalMs) return;
+
+                    _pcCloudAutosaveInFlight = true;
+                    const ok = await cloudSaveSilent();
+                    _pcCloudAutosaveInFlight = false;
+
+                    if (ok) {
+                        _pcCloudDirty = false;
+                        _pcCloudLastAutosaveAt = now;
+                    }
+                } catch(e) {
+                    _pcCloudAutosaveInFlight = false;
+                }
+            }, 5000); // lightweight polling; real throttling is intervalMs gate above
+        }
+
 
         // Minimal SHA-256 helper (no external libs)
         async function sha256Hex(str) {
@@ -5470,6 +5916,7 @@ function renderButtons(hidden) {
             state.global = { totalHands: 0, totalCorrect: 0, bestStreak: 0, byScenario: {}, byPos: {}, byPosGroup: {}, bySpot: {}, byHand: {} };
             SR.reset();
             saveMedals({});
+            try { saveChallenge({ v: 1, nodes: {}, lastPlayed: null }); } catch(e) {}
             saveProgress(); updateMenuUI(); renderUserStats();
         }
         // Memory retention classifier for UI indicators
