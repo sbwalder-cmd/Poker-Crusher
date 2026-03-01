@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>POKER CRUSHER</title>
+    <title>GTO RFI Trainer Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -336,6 +336,11 @@
             position: relative;
         }
     </style>
+
+    <!-- Cloud Sync (optional): Firebase compat SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore-compat.js"></script>
+
 </head>
 <body class="bg-slate-950 text-slate-100 h-[100dvh] flex flex-col items-center overflow-hidden font-sans">
 
@@ -368,6 +373,10 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
                     MY STATS
                 </button>
+                <button onclick="showSettings()" class="py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-bold text-slate-300 transition-all flex items-center justify-center gap-2 text-sm col-span-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v2"/><path d="M12 21v2"/><path d="M4.22 4.22l1.42 1.42"/><path d="M18.36 18.36l1.42 1.42"/><path d="M1 12h2"/><path d="M21 12h2"/><path d="M4.22 19.78l1.42-1.42"/><path d="M18.36 5.64l1.42-1.42"/><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.24.5.36 1.05.36 1.62v.76c0 .57-.12 1.12-.36 1.62Z"/></svg>
+                    SETTINGS
+                </button>
             </div>
         </div>
     </div>
@@ -382,6 +391,36 @@
         </div>
         
         <div class="flex-1 overflow-y-auto p-6 scroll-hide">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-5">
+    <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Profile</p>
+    <p class="text-sm text-slate-300 leading-relaxed mb-4">
+        Set a simple username to keep separate profiles and to make Import/Export automatic across devices.
+    </p>
+
+    <div class="bg-slate-950/40 border border-slate-800 rounded-xl p-3 mb-4">
+        <div class="flex items-center justify-between gap-3">
+            <div class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Current</div>
+            <div id="profile-current" class="text-sm font-black text-slate-200">Guest</div>
+        </div>
+    </div>
+
+    <div class="flex flex-col gap-3">
+        <input id="profile-input" type="text" placeholder="Username (letters/numbers/_/-)" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-slate-200 font-bold placeholder:text-slate-600 focus:outline-none focus:border-slate-600" />
+        <div class="grid grid-cols-2 gap-3">
+            <button onclick="saveProfileFromUI()" class="py-3 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-black transition-all">
+                SAVE
+            </button>
+            <button onclick="clearProfile()" class="py-3 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-2xl font-black text-slate-200 transition-all">
+                USE GUEST
+            </button>
+        </div>
+    </div>
+
+    <div class="mt-4 text-[11px] text-slate-500 leading-relaxed">
+        Notes: changing profile reloads the app. Your existing data is preserved inside its profile.
+    </div>
+</div>
+
             <!-- Library Navigation -->
             <div id="lib-nav" class="flex gap-2 overflow-x-auto pb-4 scroll-hide mb-6">
                 <button id="lib-tab-RFI" onclick="setLibCategory('RFI')" class="whitespace-nowrap px-6 py-2 rounded-full font-bold text-sm bg-indigo-600 text-white">RFI</button>
@@ -554,6 +593,79 @@
             <div id="action-buttons" class="shrink-0 w-full z-20" style="max-width:var(--btn-max-w, 448px);"></div>
         </div>
     </div>
+    <!-- SETTINGS SCREEN -->
+    <div id="settings-screen" class="hidden fixed inset-0 bg-slate-950 z-[60] flex flex-col overflow-hidden">
+        <div class="p-6 border-b border-white/5 flex justify-between items-center shrink-0">
+            <h2 class="text-2xl font-black">Settings</h2>
+            <button onclick="hideSettings()" class="p-2 bg-slate-900 rounded-lg text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 scroll-hide">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Data Transfer</p>
+                <p class="text-sm text-slate-300 leading-relaxed mb-4">
+                    Export a backup file on one device, then import it on another to sync your stats + spaced-rep progress.
+                </p>
+
+                <div class="flex flex-col gap-3">
+                    <button onclick="exportTrainerData()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-black transition-all flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        EXPORT DATA
+                    </button>
+
+                    <button onclick="triggerImport()" class="w-full py-4 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                        IMPORT DATA
+                    </button>
+
+                    <input id="import-file" type="file" accept="application/json" class="hidden" />
+                </div>
+
+                <div class="mt-4 text-[11px] text-slate-500 leading-relaxed">
+                    Tip: importing replaces the current device’s saved data with what’s inside the file.
+                </div>
+            
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mt-5">
+                <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Cloud Sync (Username)</p>
+                <p class="text-sm text-slate-300 leading-relaxed mb-4">
+                    Sync your progress between phone and computer using a simple username. This uses a free Firebase backend (you’ll paste your Firebase config once).
+                </p>
+
+                <div class="bg-slate-950/40 border border-slate-800 rounded-xl p-3 mb-4">
+                    <div class="flex flex-col gap-2">
+                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-500">Username</label>
+                        <input id="cloud-username" type="text" placeholder="e.g. samw" class="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-3 text-sm font-bold text-slate-200 outline-none focus:border-slate-500" />
+                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-2">Sync Code (optional)</label>
+                        <input id="cloud-code" type="password" placeholder="prevents others overwriting your username" class="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-3 text-sm font-bold text-slate-200 outline-none focus:border-slate-500" />
+                        <div class="text-[11px] text-slate-500 leading-relaxed mt-2">
+                            Tip: use a short code you’ll remember. Without a code, anyone who guesses your username could overwrite your data.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-3">
+                    <button onclick="cloudSaveNow()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-black transition-all flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                        SAVE TO CLOUD
+                    </button>
+
+                    <button onclick="cloudLoadNow()" class="w-full py-4 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        LOAD FROM CLOUD
+                    </button>
+                </div>
+
+                <div class="mt-4 text-[11px] text-slate-500 leading-relaxed">
+                    “Save” uploads your current device data. “Load” replaces this device’s data with the cloud copy, then reloads.
+                </div>
+            </div>
+
+</div>
+        </div>
+    </div>
+
 
     <!-- SESSION LOG PANEL -->
     <div id="session-log-panel" class="hidden fixed inset-0 z-[75] flex flex-col justify-end" style="background:rgba(0,0,0,0.6);" onclick="if(event.target===this)hideSessionLog()">
@@ -589,6 +701,7 @@
         <div class="bg-slate-900 border border-slate-700 rounded-3xl p-4 w-full max-w-lg shadow-2xl flex flex-col items-center">
             <h3 id="chart-pos-label" class="text-xs font-black text-white mb-2 uppercase tracking-widest text-center">Range Analysis</h3>
             <div id="chart-legend" class="flex gap-4 mb-4 text-[9px] font-bold uppercase tracking-wider"></div>
+            <div id="chart-bucket-toggle" class="hidden flex gap-2 mb-3"></div>
             <div id="chart-container" class="range-grid w-full mb-6"></div>
             <button onclick="closeChart()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold uppercase tracking-widest text-xs transition-colors">Resume</button>
         </div>
@@ -1141,8 +1254,8 @@
         };
         let limperMixPreset = 'liveish';
         function getLimperMixWeights() { return LIMPER_MIX_PRESETS[limperMixPreset].weights; }
-        function saveLimperMix() { try { localStorage.setItem('gto_limper_mix', limperMixPreset); } catch(e){} }
-        function loadLimperMix() { try { const v = localStorage.getItem('gto_limper_mix'); if (v && LIMPER_MIX_PRESETS[v]) limperMixPreset = v; } catch(e){} }
+        function saveLimperMix() { try { localStorage.setItem(profileKey('gto_limper_mix'), limperMixPreset); } catch(e){} }
+        function loadLimperMix() { try { const v = localStorage.getItem(profileKey('gto_limper_mix')); if (v && LIMPER_MIX_PRESETS[v]) limperMixPreset = v; } catch(e){} }
 
         // Pick a limper bucket from weights
         function pickLimperBucket() {
@@ -1840,8 +1953,8 @@
         // SPACED REPETITION ENGINE
         // ============================================================
         const SR = (function() {
-            const STORAGE_KEY = 'gto_sr_v2';
-            const OLD_STORAGE_KEY = 'gto_sr_v1';
+            const STORAGE_KEY = profileKey('gto_sr_v2');
+            const OLD_STORAGE_KEY = profileKey('gto_sr_v1');
             const DAY_MS = 86400000;
             const MIN_INTERVAL = 0.02;
             const MAX_INTERVAL = 90;
@@ -2563,10 +2676,10 @@
 
         // Medal storage
         function loadMedals() {
-            try { const s = localStorage.getItem('gto_medals_v1'); return s ? JSON.parse(s) : {}; } catch(e) { return {}; }
+            try { const s = localStorage.getItem(profileKey('gto_medals_v1')); return s ? JSON.parse(s) : {}; } catch(e) { return {}; }
         }
         function saveMedals(m) {
-            try { localStorage.setItem('gto_medals_v1', JSON.stringify(m)); } catch(e) {}
+            try { localStorage.setItem(profileKey('gto_medals_v1'), JSON.stringify(m)); } catch(e) {}
         }
         function getMedalForResult(hands, accuracy) {
             if (hands >= MEDAL_THRESHOLDS.gold.hands && accuracy >= MEDAL_THRESHOLDS.gold.accuracy) return 'gold';
@@ -2669,11 +2782,11 @@
         }
 
         function saveConfig() {
-            localStorage.setItem('gto_config_v2', JSON.stringify(state.config));
+            localStorage.setItem(profileKey('gto_config_v2'), JSON.stringify(state.config));
         }
         function loadConfig() {
             try {
-                const s = localStorage.getItem('gto_config_v2');
+                const s = localStorage.getItem(profileKey('gto_config_v2'));
                 if (s) {
                     const c = JSON.parse(s);
                     const validScenarios = ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C'];
@@ -2888,7 +3001,7 @@
                 });
             }
 
-            spots.forEach(spot => {
+            spots.forEach((spot, spotIdx) => {
                 const card = document.createElement('div');
                 card.className = "bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col items-center gap-4";
                 
@@ -2898,44 +3011,102 @@
                     ? `${POS_LABELS[spot.pos]} vs ${POS_LABELS[spot.opp]} open, ${POS_LABELS[spot.caller]} call`
                     : spot.opp ? `${POS_LABELS[spot.pos]} vs ${POS_LABELS[spot.opp]}` : `${POS_LABELS[spot.pos]} Open`;
                 
-                let gridHtml = '<div class="range-grid w-full gap-[0.5px]">';
-                for (let i = 0; i < 13; i++) {
-                    for (let j = 0; j < 13; j++) {
-                        const r1 = RANKS[i], r2 = RANKS[j];
-                        let hKey = (i === j) ? r1 + r2 : (i < j ? r1 + r2 + 's' : r2 + r1 + 'o');
-                        let bg = 'bg-slate-950';
-                        
-                        if (state.libCategory === 'RFI') {
-                            if (checkRangeHelper(hKey, spot.data)) bg = 'bg-indigo-600';
-                        } else if (state.libCategory === 'VS_LIMP') {
-                            if (checkRangeHelper(hKey, getLimpRaise(spot.data))) bg = 'bg-orange-600';
-                            else if (checkRangeHelper(hKey, getLimpPassive(spot.data))) bg = 'bg-cyan-700';
-                        } else if (state.libCategory === 'SQUEEZE') {
-                            if (checkRangeHelper(hKey, spot.data["Squeeze"])) { bg = 'bg-red-600'; if (isSqueezeBluff(hKey, spot.data)) bg = 'bg-red-600 sq-bluff-stripe'; }
-                            else if (spot.data["Call"] && checkRangeHelper(hKey, spot.data["Call"])) bg = 'bg-emerald-600';
-                        } else if (state.libCategory === 'SQUEEZE_2C') {
-                            if (checkRangeHelper(hKey, spot.data["Squeeze"])) { bg = 'bg-red-600'; if (isSqueezeBluff(hKey, spot.data)) bg = 'bg-red-600 sq-bluff-stripe'; }
-                            else if (spot.data["Call"] && checkRangeHelper(hKey, spot.data["Call"])) bg = 'bg-emerald-600';
-                        } else {
-                            if (checkRangeHelper(hKey, spot.data["3-bet"] || spot.data["4-bet"])) bg = 'bg-indigo-600';
-                            else if (checkRangeHelper(hKey, spot.data["Call"])) bg = 'bg-emerald-600';
+                const gridId = `lib-grid-${spotIdx}`;
+                const renderGrid = (data) => {
+                    let g = '';
+                    for (let i = 0; i < 13; i++) {
+                        for (let j = 0; j < 13; j++) {
+                            const r1 = RANKS[i], r2 = RANKS[j];
+                            let hKey = (i === j) ? r1 + r2 : (i < j ? r1 + r2 + 's' : r2 + r1 + 'o');
+                            let bg = 'bg-slate-950';
+                            
+                            if (state.libCategory === 'RFI') {
+                                if (checkRangeHelper(hKey, data)) bg = 'bg-indigo-600';
+                            } else if (state.libCategory === 'VS_LIMP') {
+                                if (checkRangeHelper(hKey, getLimpRaise(data))) bg = 'bg-orange-600';
+                                else if (checkRangeHelper(hKey, getLimpPassive(data))) bg = 'bg-cyan-700';
+                            } else if (state.libCategory === 'SQUEEZE') {
+                                if (checkRangeHelper(hKey, data["Squeeze"])) { bg = 'bg-red-600'; if (isSqueezeBluff(hKey, data)) bg = 'bg-red-600 sq-bluff-stripe'; }
+                                else if (data["Call"] && checkRangeHelper(hKey, data["Call"])) bg = 'bg-emerald-600';
+                            } else if (state.libCategory === 'SQUEEZE_2C') {
+                                if (checkRangeHelper(hKey, data["Squeeze"])) { bg = 'bg-red-600'; if (isSqueezeBluff(hKey, data)) bg = 'bg-red-600 sq-bluff-stripe'; }
+                                else if (data["Call"] && checkRangeHelper(hKey, data["Call"])) bg = 'bg-emerald-600';
+                            } else {
+                                if (checkRangeHelper(hKey, data["3-bet"] || data["4-bet"])) bg = 'bg-indigo-600';
+                                else if (checkRangeHelper(hKey, data["Call"])) bg = 'bg-emerald-600';
+                            }
+                            g += `<div class="aspect-square rounded-[1px] ${bg}"></div>`;
                         }
-                        gridHtml += `<div class="aspect-square rounded-[1px] ${bg}"></div>`;
                     }
+                    return g;
+                };
+
+                let gridHtml = `<div id="${gridId}" class="range-grid w-full gap-[0.5px]">${renderGrid(spot.data)}</div>`;
+
+                // Bucket toggle for VS_LIMP library cards
+                let bucketToggleHtml = '';
+                if (state.libCategory === 'VS_LIMP') {
+                    bucketToggleHtml = `<div class="flex gap-1.5" id="lib-btog-${spotIdx}">` +
+                        ['1L','2L','3P'].map(b => {
+                            const sel = b === '1L';
+                            const lab = b === '1L' ? '1L' : b === '2L' ? '2L' : '3+L';
+                            return `<button data-bucket="${b}" onclick="switchLibBucket(${spotIdx},'${spot.pos}','${spot.opp}','${b}')" class="px-2 py-0.5 rounded-full text-[8px] font-bold transition-all ${sel ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}">${lab}</button>`;
+                        }).join('') + '</div>';
                 }
-                gridHtml += '</div>';
 
                 card.innerHTML = `
                     <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${title}</p>
+                    ${bucketToggleHtml}
                     ${gridHtml}
-                    <button onclick="zoomSpot('${spot.pos}', '${spot.squeezeKey || spot.opp || ''}', '${state.libCategory}')" class="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Full View</button>
+                    <button onclick="zoomSpot('${spot.pos}', '${spot.squeezeKey || spot.opp || ''}', '${state.libCategory}', ${spotIdx})" class="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Full View</button>
                 `;
+
+                // Store render function for bucket switching
+                if (state.libCategory === 'VS_LIMP') {
+                    card._renderGrid = renderGrid;
+                    card._gridId = gridId;
+                }
+
                 content.appendChild(card);
             });
         }
 
-        function zoomSpot(pos, opp, cat) {
+        function switchLibBucket(spotIdx, pos, opp, bucket) {
+            const gridEl = document.getElementById(`lib-grid-${spotIdx}`);
+            const togEl = document.getElementById(`lib-btog-${spotIdx}`);
+            if (!gridEl || !togEl) return;
+            // Store active bucket on the toggle element for Full View to read
+            togEl.dataset.activeBucket = bucket;
+            const data = getLimpDataForBucket(pos, opp, bucket) || allFacingLimps[`${pos}_vs_${opp}_Limp`];
+            if (!data) return;
+            // Re-render grid
+            let g = '';
+            for (let i = 0; i < 13; i++) {
+                for (let j = 0; j < 13; j++) {
+                    const r1 = RANKS[i], r2 = RANKS[j];
+                    let hKey = (i === j) ? r1 + r2 : (i < j ? r1 + r2 + 's' : r2 + r1 + 'o');
+                    let bg = 'bg-slate-950';
+                    if (checkRangeHelper(hKey, getLimpRaise(data))) bg = 'bg-orange-600';
+                    else if (checkRangeHelper(hKey, getLimpPassive(data))) bg = 'bg-cyan-700';
+                    g += `<div class="aspect-square rounded-[1px] ${bg}"></div>`;
+                }
+            }
+            gridEl.innerHTML = g;
+            // Update toggle button styles
+            togEl.querySelectorAll('button').forEach(btn => {
+                const b = btn.dataset.bucket;
+                if (b === bucket) { btn.className = 'px-2 py-0.5 rounded-full text-[8px] font-bold transition-all bg-indigo-600 text-white'; }
+                else { btn.className = 'px-2 py-0.5 rounded-full text-[8px] font-bold transition-all bg-slate-800 text-slate-500 hover:text-slate-300'; }
+            });
+        }
+
+        function zoomSpot(pos, opp, cat, spotIdx) {
             _chartIsReview = true;
+            if (cat === 'VS_LIMP') {
+                // Read active bucket from library card toggle if available
+                const togEl = spotIdx != null && document.getElementById(`lib-btog-${spotIdx}`);
+                state.limperBucket = (togEl && togEl.dataset.activeBucket) || '1L';
+            }
             showChart(pos, null, cat, opp);
         }
 
@@ -3960,9 +4131,19 @@
             return false;
         }
 
+        // Store chart context so bucket toggle can re-render
+        let _chartCtx = { pos: null, target: null, scenario: null, oppPos: null };
+
         function showChart(pos, target, scenario, oppPos) {
+            _chartCtx = { pos, target, scenario, oppPos };
+            _renderChart(pos, target, scenario, oppPos);
+            document.getElementById('chart-modal').classList.remove('hidden');
+        }
+
+        function _renderChart(pos, target, scenario, oppPos) {
             let html = '';
             const legendEl = document.getElementById('chart-legend');
+            const bucketToggle = document.getElementById('chart-bucket-toggle');
             
             if (scenario === 'RFI') {
                 legendEl.innerHTML = `<div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-indigo-600 rounded"></div><span>Raise</span></div>`;
@@ -3972,13 +4153,26 @@
                 const isBlinds = lData && isLimpBlindSpot(lData);
                 const rLabel = isBlinds ? 'Raise' : 'Iso Raise';
                 const pLabel = isBB ? 'Check' : isBlinds ? 'Complete' : 'Overlimp';
-                const bucketLabel = state.limperBucket === '3P' ? ' · 3+L' : state.limperBucket === '2L' ? ' · 2L' : '';
-                legendEl.innerHTML = `<div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-orange-600 rounded"></div><span>${rLabel}</span></div><div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-cyan-700 rounded"></div><span>${pLabel}${bucketLabel}</span></div>`;
+                legendEl.innerHTML = `<div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-orange-600 rounded"></div><span>${rLabel}</span></div><div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-cyan-700 rounded"></div><span>${pLabel}</span></div>`;
             } else if (scenario === 'SQUEEZE' || scenario === 'SQUEEZE_2C') {
                 legendEl.innerHTML = `<div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-red-600 rounded"></div><span>Squeeze</span></div><div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-red-600 rounded sq-bluff-stripe"></div><span>Squeeze (Bluff)</span></div><div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-emerald-600 rounded"></div><span>Call</span></div>`;
             } else {
                 const label1 = scenario === 'RFI_VS_3BET' ? '4-Bet' : '3-Bet';
                 legendEl.innerHTML = `<div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-indigo-600 rounded"></div><span>${label1}</span></div><div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-emerald-600 rounded"></div><span>Call</span></div>`;
+            }
+
+            // Bucket toggle for VS_LIMP
+            if (scenario === 'VS_LIMP') {
+                const buckets = ['1L', '2L', '3P'];
+                const labels = { '1L': '1 Limper', '2L': '2 Limpers', '3P': '3+ Limpers' };
+                bucketToggle.classList.remove('hidden');
+                bucketToggle.innerHTML = buckets.map(b => {
+                    const sel = b === state.limperBucket;
+                    return `<button onclick="switchChartBucket('${b}')" class="px-3 py-1 rounded-full text-[9px] font-bold transition-all ${sel ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${labels[b]}</button>`;
+                }).join('');
+            } else {
+                bucketToggle.classList.add('hidden');
+                bucketToggle.innerHTML = '';
             }
 
             for (let i = 0; i < 13; i++) {
@@ -4014,16 +4208,25 @@
                 }
             }
             document.getElementById('chart-container').innerHTML = html;
+
+            // Position label
             if (scenario === 'SQUEEZE') {
                 const p = parseSqueezeKey(oppPos);
                 document.getElementById('chart-pos-label').innerText = p ? `${POS_LABELS[p.hero]} vs ${POS_LABELS[p.opener]} open, ${POS_LABELS[p.caller]} call` : '';
             } else if (scenario === 'SQUEEZE_2C') {
                 const p = parseSqueeze2CKey(oppPos);
                 document.getElementById('chart-pos-label').innerText = p ? `${POS_LABELS[p.hero]} vs ${POS_LABELS[p.opener]} open, ${POS_LABELS[p.caller1]} & ${POS_LABELS[p.caller2]} call` : '';
+            } else if (scenario === 'VS_LIMP') {
+                const bucketTag = { '1L': '1 Limper', '2L': '2 Limpers', '3P': '3+ Limpers' }[state.limperBucket] || '';
+                document.getElementById('chart-pos-label').innerText = `${POS_LABELS[pos]} vs ${POS_LABELS[oppPos] || 'Field'} · ${bucketTag}`;
             } else {
                 document.getElementById('chart-pos-label').innerText = `${POS_LABELS[pos]} vs ${POS_LABELS[oppPos] || 'Field'}`;
             }
-            document.getElementById('chart-modal').classList.remove('hidden');
+        }
+
+        function switchChartBucket(bucket) {
+            state.limperBucket = bucket;
+            _renderChart(_chartCtx.pos, _chartCtx.target, _chartCtx.scenario, _chartCtx.oppPos);
         }
 
         let _toastTimer = null;
@@ -4089,8 +4292,8 @@
             document.getElementById('menu-screen').classList.remove('hidden');
             updateMenuUI();
         }
-        function saveProgress() { localStorage.setItem('gto_rfi_stats_v2', JSON.stringify(state.global)); SR.save(); }
-        function loadProgress() { const s = localStorage.getItem('gto_rfi_stats_v2'); if (s) state.global = JSON.parse(s); if (!state.global.byScenario) state.global.byScenario = {}; if (!state.global.byPos) state.global.byPos = {}; if (!state.global.byPosGroup) state.global.byPosGroup = {}; if (!state.global.bestStreak) state.global.bestStreak = 0; if (!state.global.bySpot) state.global.bySpot = {}; if (!state.global.byHand) state.global.byHand = {}; loadConfig(); loadLimperMix(); SR.load(); updateMenuUI(); if (window.RANGE_VALIDATE) { validateAndNormalizeRanges(facingRfiRanges); validateAndNormalizeRanges(rfiVs3BetRanges); validateAndNormalizeRanges(allFacingLimps); } }
+        function saveProgress() { localStorage.setItem(profileKey('gto_rfi_stats_v2'), JSON.stringify(state.global)); SR.save(); }
+        function loadProgress() { const s = localStorage.getItem(profileKey('gto_rfi_stats_v2')); if (s) state.global = JSON.parse(s); if (!state.global.byScenario) state.global.byScenario = {}; if (!state.global.byPos) state.global.byPos = {}; if (!state.global.byPosGroup) state.global.byPosGroup = {}; if (!state.global.bestStreak) state.global.bestStreak = 0; if (!state.global.bySpot) state.global.bySpot = {}; if (!state.global.byHand) state.global.byHand = {}; loadConfig(); loadLimperMix(); SR.load(); updateMenuUI(); if (window.RANGE_VALIDATE) { validateAndNormalizeRanges(facingRfiRanges); validateAndNormalizeRanges(rfiVs3BetRanges); validateAndNormalizeRanges(allFacingLimps); } }
         function updateUI() { document.getElementById('accuracy').innerText = (state.sessionStats.total ? Math.round(state.sessionStats.correct/state.sessionStats.total*100) : 0) + '%'; document.getElementById('streak').innerText = state.sessionStats.streak; updateDrillCounter(); }
         function updateMenuUI() {
             const allSpots = getAllSpotKeys();
@@ -4529,6 +4732,410 @@
             document.getElementById('stats-screen').classList.remove('hidden');
         }
         function hideUserStats() { document.getElementById('stats-screen').classList.add('hidden'); }
+
+                // ============================================================
+        // PROFILE (simple username) — namespaced storage keys
+        // ============================================================
+        const PROFILE_KEY = 'pc_profile_v1';
+
+        function getProfileName() {
+            try { return (localStorage.getItem(PROFILE_KEY) || '').trim(); } catch(e) { return ''; }
+        }
+
+        function profileKey(baseKey) {
+            const p = getProfileName();
+            if (!p) return baseKey; // Guest (backward compatible)
+            return `${baseKey}__pc_${p}`;
+        }
+
+        function normalizeProfileName(raw) {
+            const s = String(raw || '').trim().toLowerCase();
+            // allow letters, numbers, underscore, dash; 2–20 chars
+            if (!s) return '';
+            if (s.length < 2 || s.length > 20) return null;
+            if (!/^[a-z0-9_-]+$/.test(s)) return null;
+            return s;
+        }
+
+        function updateProfileUI() {
+            const cur = getProfileName();
+            const el = document.getElementById('profile-current');
+            if (el) el.textContent = cur ? cur : 'Guest';
+            const inp = document.getElementById('profile-input');
+            if (inp) inp.value = cur || '';
+        }
+
+        function migrateBaseDataIntoProfile(p) {
+            // If user sets a profile for the first time, copy existing Guest keys into profile namespace
+            // (so they don’t "lose" progress when switching to username).
+            if (!p) return;
+            const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
+            baseKeys.forEach(k => {
+                const namespaced = `${k}__pc_${p}`;
+                try {
+                    const already = localStorage.getItem(namespaced);
+                    const base = localStorage.getItem(k);
+                    if ((already === null || already === undefined) && base !== null && base !== undefined) {
+                        localStorage.setItem(namespaced, base);
+                    }
+                } catch(e) {}
+            });
+        }
+
+        function setProfileName(raw) {
+            const p = normalizeProfileName(raw);
+            if (p === null) {
+                showToast('Invalid username (2–20, a-z 0-9 _ -)', 'incorrect', 2200);
+                return;
+            }
+            try {
+                if (!p) {
+                    localStorage.removeItem(PROFILE_KEY);
+                } else {
+                    // If switching from Guest to a new profile, migrate existing Guest data into it (one-time copy)
+                    const prev = getProfileName();
+                    if (!prev) migrateBaseDataIntoProfile(p);
+                    localStorage.setItem(PROFILE_KEY, p);
+                }
+            } catch(e) {}
+
+            // Reload so SR engine + storage bindings re-init cleanly under the new namespace
+            location.reload();
+        }
+
+        function saveProfileFromUI() {
+            const inp = document.getElementById('profile-input');
+            setProfileName(inp ? inp.value : '');
+        }
+
+        function clearProfile() { setProfileName(''); }
+
+        // Initialize profile UI on load and keep Settings screen in sync
+        (function initProfileUI() {
+            // Populate on initial load
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', updateProfileUI);
+            } else {
+                updateProfileUI();
+            }
+        })();
+
+        function showSettings() { updateProfileUI(); document.getElementById('settings-screen').classList.remove('hidden'); }
+        function hideSettings() { document.getElementById('settings-screen').classList.add('hidden'); }
+
+                function exportTrainerData() {
+            try {
+                const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
+                const profile = getProfileName();
+                const payload = {
+                    app: 'PokerCrusher',
+                    exportVersion: 2,
+                    exportedAt: new Date().toISOString(),
+                    profile: profile || '',
+                    data: {}
+                };
+
+                baseKeys.forEach(k => {
+                    const v = localStorage.getItem(profileKey(k));
+                    if (v !== null && v !== undefined) payload.data[k] = v; // store raw string (portable)
+                });
+
+                const json = JSON.stringify(payload, null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                const d = new Date();
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                a.href = url;
+
+                const suffix = profile ? `_${profile}` : '';
+                a.download = `pokercrusher_backup${suffix}_${yyyy}-${mm}-${dd}.json`;
+
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 500);
+
+                showToast('Exported backup file', 'correct', 1400);
+            } catch (e) {
+                console.warn('Export error:', e);
+                showToast('Export failed', 'incorrect', 1800);
+            }
+        }
+
+        function triggerImport() {
+            const input = document.getElementById('import-file');
+            if (!input) return;
+            input.value = '';
+            input.click();
+        }
+
+                function importTrainerDataFromFile(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                try {
+                    const text = ev.target.result;
+                    const payload = JSON.parse(text);
+
+                    if (!payload || typeof payload !== 'object' || !payload.data || typeof payload.data !== 'object') {
+                        throw new Error('Invalid backup file.');
+                    }
+
+                    // If the backup has a profile name, switch to it (safe: we reload after import).
+                    if (payload.profile !== undefined) {
+                        const normalized = normalizeProfileName(payload.profile);
+                        if (normalized === null) {
+                            throw new Error('Backup has invalid profile name.');
+                        }
+                        try {
+                            if (!normalized) localStorage.removeItem(PROFILE_KEY);
+                            else localStorage.setItem(PROFILE_KEY, normalized);
+                        } catch(e) {}
+                    }
+
+                    const allowed = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
+                    let wrote = 0;
+                    allowed.forEach(k => {
+                        if (payload.data[k] !== undefined && payload.data[k] !== null) {
+                            localStorage.setItem(profileKey(k), String(payload.data[k]));
+                            wrote++;
+                        }
+                    });
+
+                    showToast(`Import complete (${wrote} items)`, 'correct', 1400);
+
+                    // Reload so SR engine + UI re-init under the imported profile namespace
+                    setTimeout(() => location.reload(), 250);
+                } catch (e) {
+                    console.warn('Import error:', e);
+                    showToast('Import failed (bad file)', 'incorrect', 2000);
+                }
+            };
+            reader.onerror = function() {
+                showToast('Import failed (read error)', 'incorrect', 2000);
+            };
+            reader.readAsText(file);
+        }
+
+
+        // ============================================================
+        // CLOUD SYNC (Firebase Firestore) — OPTIONAL
+        // ============================================================
+        // 1) Create a Firebase project (free)
+        // 2) Enable Firestore Database
+        // 3) Paste your firebaseConfig below (Project settings → Web app)
+        //
+        // SECURITY NOTE:
+        // This is "simple username sync" meant for personal use / friends.
+        // The optional Sync Code is hashed into the document id to prevent casual overwrites.
+        // For a real public product, you'd add proper auth + rules.
+
+        const PC_CLOUD_SETTINGS_KEY = 'pc_cloud_settings_v1';
+
+        // Paste your config here (leave as null until you set it)
+        const firebaseConfig = {
+  apiKey: "AIzaSyArpfetXIDgkdvnFXuWhpwKTyDyhDNqaFM",
+  authDomain: "poker-crusher.firebaseapp.com",
+  projectId: "poker-crusher",
+  storageBucket: "poker-crusher.firebasestorage.app",
+  messagingSenderId: "665996380905",
+  appId: "1:665996380905:web:eecb6be9bd2bea9c233e78"
+};
+
+        let _pcFirebaseInited = false;
+        function initCloud() {
+            if (_pcFirebaseInited) return true;
+            if (!firebaseConfig) {
+                showToast('Cloud sync not set up (missing Firebase config)', 'incorrect', 2200);
+                return false;
+            }
+            try {
+                if (!window.firebase || !firebase.initializeApp) {
+                    showToast('Cloud sync failed (Firebase SDK not loaded)', 'incorrect', 2200);
+                    return false;
+                }
+                // Avoid duplicate init
+                if (firebase.apps && firebase.apps.length === 0) firebase.initializeApp(firebaseConfig);
+                else if (!firebase.apps) firebase.initializeApp(firebaseConfig);
+
+                _pcFirebaseInited = true;
+                return true;
+            } catch (e) {
+                console.warn('Firebase init error:', e);
+                showToast('Cloud sync init failed', 'incorrect', 2200);
+                return false;
+            }
+        }
+
+        function loadCloudSettings() {
+            try {
+                const s = localStorage.getItem(PC_CLOUD_SETTINGS_KEY);
+                if (s) return JSON.parse(s) || {};
+            } catch(e) {}
+            return {};
+        }
+        function saveCloudSettings(obj) {
+            try { localStorage.setItem(PC_CLOUD_SETTINGS_KEY, JSON.stringify(obj || {})); } catch(e) {}
+        }
+        function hydrateCloudUI() {
+            const cs = loadCloudSettings();
+            const u = document.getElementById('cloud-username');
+            const c = document.getElementById('cloud-code');
+            if (u && typeof cs.username === 'string') u.value = cs.username;
+            if (c && typeof cs.code === 'string') c.value = cs.code;
+        }
+
+        // Minimal SHA-256 helper (no external libs)
+        async function sha256Hex(str) {
+            const enc = new TextEncoder().encode(str);
+            const buf = await crypto.subtle.digest('SHA-256', enc);
+            const arr = Array.from(new Uint8Array(buf));
+            return arr.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function getCloudDocId(username, code) {
+            const u = (username || '').trim().toLowerCase();
+            const c = (code || '').trim();
+            if (!u) return null;
+            // Hash to keep doc ids uniform and to fold in optional code
+            return await sha256Hex('pc|' + u + '|' + c);
+        }
+
+        function buildTrainerPayloadForSync() {
+            // Keep identical to exportTrainerData payload shape
+            const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
+            const profile = getProfileName();
+            const payload = {
+                app: 'PokerCrusher',
+                exportVersion: 2,
+                exportedAt: new Date().toISOString(),
+                profile: profile || 'Guest',
+                data: {}
+            };
+
+            // Include both base keys AND profile-suffixed keys when profile is not Guest
+            const keys = [...baseKeys];
+            if (profile && profile !== 'Guest') {
+                baseKeys.forEach(k => keys.push(k + '__pc_' + profile));
+            }
+
+            keys.forEach(k => {
+                const v = localStorage.getItem(k);
+                if (v !== null && v !== undefined) payload.data[k] = v;
+            });
+
+            return payload;
+        }
+
+        function applyTrainerPayload(payload) {
+            if (!payload || typeof payload !== 'object' || !payload.data || typeof payload.data !== 'object') {
+                showToast('Cloud load failed (bad data)', 'incorrect', 2000);
+                return false;
+            }
+
+            // Optional: auto-switch profile if present
+            if (payload.profile && typeof payload.profile === 'string') {
+                try { setProfileName(payload.profile); } catch(e) {}
+            }
+
+            // Write all keys
+            const data = payload.data;
+            Object.keys(data).forEach(k => {
+                try { localStorage.setItem(k, data[k]); } catch(e) {}
+            });
+
+            // Also store a friendly "last imported" marker
+            try { localStorage.setItem('pc_last_cloud_sync_at', new Date().toISOString()); } catch(e) {}
+
+            return true;
+        }
+
+        async function cloudSaveNow() {
+            const uEl = document.getElementById('cloud-username');
+            const cEl = document.getElementById('cloud-code');
+            const username = uEl ? uEl.value : '';
+            const code = cEl ? cEl.value : '';
+
+            saveCloudSettings({ username, code });
+
+            if (!initCloud()) return;
+
+            const docId = await getCloudDocId(username, code);
+            if (!docId) { showToast('Enter a username', 'incorrect', 1600); return; }
+
+            const payload = buildTrainerPayloadForSync();
+            payload.cloudSavedAt = new Date().toISOString();
+
+            try {
+                showToast('Saving to cloud...', 'correct', 900);
+                const db = firebase.firestore();
+                await db.collection('pokercrusher_sync').doc(docId).set(payload, { merge: false });
+                showToast('Saved to cloud', 'correct', 1400);
+            } catch (e) {
+                console.warn('Cloud save error:', e);
+                showToast('Cloud save failed', 'incorrect', 2200);
+            }
+        }
+
+        async function cloudLoadNow() {
+            const uEl = document.getElementById('cloud-username');
+            const cEl = document.getElementById('cloud-code');
+            const username = uEl ? uEl.value : '';
+            const code = cEl ? cEl.value : '';
+
+            saveCloudSettings({ username, code });
+
+            if (!initCloud()) return;
+
+            const docId = await getCloudDocId(username, code);
+            if (!docId) { showToast('Enter a username', 'incorrect', 1600); return; }
+
+            try {
+                showToast('Loading from cloud...', 'correct', 900);
+                const db = firebase.firestore();
+                const snap = await db.collection('pokercrusher_sync').doc(docId).get();
+                if (!snap.exists) {
+                    showToast('No cloud data found for that username', 'incorrect', 2200);
+                    return;
+                }
+                const payload = snap.data();
+                const ok = applyTrainerPayload(payload);
+                if (ok) {
+                    showToast('Loaded from cloud (reloading)', 'correct', 1400);
+                    setTimeout(() => location.reload(), 400);
+                }
+            } catch (e) {
+                console.warn('Cloud load error:', e);
+                showToast('Cloud load failed', 'incorrect', 2200);
+            }
+        }
+
+        // Populate fields when Settings opens
+        const _oldShowSettings = window.showSettings;
+        window.showSettings = function() {
+            try { if (_oldShowSettings) _oldShowSettings(); } catch(e) {}
+            setTimeout(hydrateCloudUI, 50);
+        };
+
+
+
+
+        // Wire import input once// Wire import input once
+        (function(){
+            const input = document.getElementById('import-file');
+            if (input && !input._wired) {
+                input._wired = true;
+                input.addEventListener('change', (e) => {
+                    const f = e.target.files && e.target.files[0];
+                    importTrainerDataFromFile(f);
+                });
+            }
+        })();
+
         function resetStats() {
             if (!confirm('Reset all your stats? This cannot be undone.')) return;
             state.global = { totalHands: 0, totalCorrect: 0, bestStreak: 0, byScenario: {}, byPos: {}, byPosGroup: {}, bySpot: {}, byHand: {} };
