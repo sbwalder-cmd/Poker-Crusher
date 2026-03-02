@@ -2010,8 +2010,7 @@
             sessionStats: { total: 0, correct: 0, streak: 0 },
             sessionLog: [], // array of hand records for this session
             recentHandKeys: [], // variety guard: last N hand keys for anti-repeat
-            // history: rolling per-hand outcomes for charts (kept small + persisted)
-            global: { totalHands: 0, totalCorrect: 0, bestStreak: 0, byScenario: {}, byPos: {}, byPosGroup: {}, bySpot: {}, byHand: {}, history: [] },
+            global: { totalHands: 0, totalCorrect: 0, bestStreak: 0, byScenario: {}, byPos: {}, byPosGroup: {}, bySpot: {}, byHand: {} },
             config: { scenarios: ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C'], positions: [...ALL_POSITIONS] },
             libCategory: 'RFI'
         };
@@ -2811,24 +2810,18 @@
         // Node definitions: keep this simple + stable. Uses existing training engine + SR stats.
         // Each node maps to a focused drill (scenario + optional position restrictions).
         const CHALLENGE_NODES = [
-    // Warm-up / core single-raiser spots
-    { id: 'n1_rfi_ep',     title: 'Open Ranges: EP',       desc: 'UTG/UTG1/UTG2 opens',   scenario: 'RFI',        positions: ['UTG','UTG1','UTG2'], hands: 25, acc: 80, prereq: [] },
-    { id: 'n2_rfi_mp',     title: 'Open Ranges: MP',       desc: 'LJ/HJ opens',           scenario: 'RFI',        positions: ['LJ','HJ'],           hands: 25, acc: 80, prereq: ['n1_rfi_ep'] },
-    { id: 'n3_rfi_lp',     title: 'Open Ranges: LP',       desc: 'CO/BTN opens',          scenario: 'RFI',        positions: ['CO','BTN'],          hands: 25, acc: 80, prereq: ['n2_rfi_mp'] },
-    { id: 'n4_rfi_blinds', title: 'Open Ranges: Blinds',   desc: 'SB opens',              scenario: 'RFI',        positions: ['SB'],                hands: 25, acc: 80, prereq: ['n3_rfi_lp'] },
+            { id: 'n1_rfi_ep',    title: 'Open Ranges: EP',    desc: 'UTG/UTG1/UTG2 opens', scenario: 'RFI', positions: ['UTG','UTG1','UTG2'], hands: 25, acc: 80, prereq: [] },
+            { id: 'n2_rfi_mp',    title: 'Open Ranges: MP',    desc: 'LJ/HJ opens',         scenario: 'RFI', positions: ['LJ','HJ'],       hands: 25, acc: 80, prereq: ['n1_rfi_ep'] },
+            { id: 'n3_rfi_lp',    title: 'Open Ranges: LP',    desc: 'CO/BTN opens',        scenario: 'RFI', positions: ['CO','BTN'],      hands: 25, acc: 80, prereq: ['n2_rfi_mp'] },
+            { id: 'n4_rfi_blinds',title: 'Open Ranges: Blinds',desc: 'SB opens',            scenario: 'RFI', positions: ['SB'],           hands: 25, acc: 80, prereq: ['n3_rfi_lp'] },
 
-    { id: 'n5_def_blinds', title: 'Defend vs RFI: Blinds', desc: 'SB/BB defending',       scenario: 'FACING_RFI', positions: ['SB','BB'],           hands: 25, acc: 78, prereq: ['n4_rfi_blinds'] },
-    { id: 'n6_vs3b_ip',    title: 'RFI vs 3-bet: IP',      desc: 'CO/BTN vs 3-bet',       scenario: 'RFI_VS_3BET',positions: ['CO','BTN'],          hands: 25, acc: 75, prereq: ['n5_def_blinds'] },
-    { id: 'n7_vs3b_oop',   title: 'RFI vs 3-bet: OOP',     desc: 'SB vs 3-bet',           scenario: 'RFI_VS_3BET',positions: ['SB'],                hands: 25, acc: 75, prereq: ['n6_vs3b_ip'] },
+            { id: 'n5_def_blinds',title: 'Defend vs RFI: Blinds', desc: 'SB/BB defending',  scenario: 'FACING_RFI', positions: ['SB','BB'], hands: 25, acc: 78, prereq: ['n4_rfi_blinds'] },
+            { id: 'n6_vs3b_ip',   title: 'RFI vs 3-bet: IP',   desc: 'CO/BTN vs 3-bet',     scenario: 'RFI_VS_3BET', positions: ['CO','BTN'], hands: 25, acc: 75, prereq: ['n5_def_blinds'] },
+            { id: 'n7_vs3b_oop',  title: 'RFI vs 3-bet: OOP',  desc: 'SB vs 3-bet',         scenario: 'RFI_VS_3BET', positions: ['SB'],     hands: 25, acc: 75, prereq: ['n6_vs3b_ip'] },
 
-    // Multiway / live-poker pain points
-    { id: 'n8_vs_limp_1',  title: 'Vs Limpers I',          desc: '1 limper baseline',     scenario: 'VS_LIMP',    positions: [...ALL_POSITIONS],    hands: 25, acc: 75, prereq: ['n7_vs3b_oop'], limperBucket: '1L' },
-    { id: 'n9_vs_limp_2',  title: 'Vs Limpers II',         desc: '2 limp callers',        scenario: 'VS_LIMP',    positions: [...ALL_POSITIONS],    hands: 25, acc: 73, prereq: ['n8_vs_limp_1'], limperBucket: '2L' },
-    { id: 'n10_vs_limp_3', title: 'Vs Limpers III',        desc: '3 limp callers',        scenario: 'VS_LIMP',    positions: [...ALL_POSITIONS],    hands: 25, acc: 70, prereq: ['n9_vs_limp_2'], limperBucket: '3L' },
-
-    { id: 'n11_squeeze_1', title: 'Squeeze I',             desc: 'Open + 1 caller',       scenario: 'SQUEEZE',    positions: ['CO','BTN','SB','BB'], hands: 25, acc: 72, prereq: ['n10_vs_limp_3'] },
-    { id: 'n12_squeeze_2', title: 'Squeeze II',            desc: 'Open + 2 callers',      scenario: 'SQUEEZE_2C', positions: ['CO','BTN','SB','BB'], hands: 25, acc: 70, prereq: ['n11_squeeze_1'] }
-];
+            { id: 'n8_vs_limp',   title: 'Vs Limpers',         desc: '1 limper baseline',   scenario: 'VS_LIMP', positions: [...ALL_POSITIONS], hands: 25, acc: 75, prereq: ['n7_vs3b_oop'], limperBucket: '1L' },
+            { id: 'n9_squeeze',   title: 'Squeeze',            desc: 'Open + call',          scenario: 'SQUEEZE', positions: ['BTN','SB','BB','CO'], hands: 25, acc: 72, prereq: ['n8_vs_limp'] }
+        ];
 
         // Runtime state for an active challenge attempt
         let challengeState = { active: false, nodeId: null, reqAcc: 0 };
@@ -2865,9 +2858,6 @@
                     : unlocked
                         ? `<span class="px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 text-[9px] font-black uppercase tracking-wider">Unlocked</span>`
                         : `<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-500 text-[9px] font-black uppercase tracking-wider">Locked</span>`;
-
-                const tier = rec.tierBest || null;
-                const tierBadge = tier ? `<span class="px-2 py-0.5 rounded-full ${tier==='gold'?'bg-yellow-500/15 text-yellow-300 border border-yellow-400/30':tier==='silver'?'bg-slate-200/10 text-slate-200 border border-slate-200/20':'bg-amber-500/15 text-amber-300 border border-amber-400/20'} text-[9px] font-black uppercase tracking-wider">${tier==='gold'?'Gold':tier==='silver'?'Silver':'Bronze'}</span>` : '';
 
                 const bestHtml = best != null
                     ? `<span class="text-[10px] text-slate-500">Best: <span class="text-slate-300 font-black">${best}%</span></span>`
@@ -2950,46 +2940,955 @@
             startConfiguredTraining();
         }
 
-        function computeChallengeTier(req, accuracy) {
-    // Award tiers for *passing* runs only.
-    // Bronze: pass; Silver: req+5; Gold: req+10
-    if (accuracy < req) return null;
-    if (accuracy >= req + 10) return 'gold';
-    if (accuracy >= req + 5) return 'silver';
-    return 'bronze';
+        function finishChallengeAttempt(passed, accuracy) {
+            const progress = getChallengeProgress();
+            const nodeId = challengeState.nodeId;
+            const rec = progress.nodes[nodeId] || {};
+            rec.bestAcc = Math.max(rec.bestAcc || 0, accuracy || 0);
+            if (passed) {
+                rec.completed = true;
+                rec.completedAt = Date.now();
+            }
+            progress.nodes[nodeId] = rec;
+            saveChallenge(progress);
+        }
+
+        function exitToChallenge() {
+            // Restore config if drill was active
+            if (drillState._savedConfig) {
+                state.config = drillState._savedConfig;
+                drillState._savedConfig = null;
+            }
+            drillState.active = false;
+
+            document.getElementById('trainer-screen').classList.add('hidden');
+            document.getElementById('challenge-screen').classList.remove('hidden');
+            renderChallengeScreen();
+        }
+
+        
+        function endChallengeToMenu() {
+            // Restore config if drill was active
+            if (drillState._savedConfig) {
+                state.config = drillState._savedConfig;
+                drillState._savedConfig = null;
+            }
+            drillState.active = false;
+            challengeState.active = false;
+            document.getElementById('trainer-screen').classList.add('hidden');
+            document.getElementById('drill-complete-screen').classList.add('hidden');
+            document.getElementById('challenge-screen').classList.add('hidden');
+            document.getElementById('menu-screen').classList.remove('hidden');
+            updateMenuUI();
+        }
+
+function retryChallenge() {
+            const nodeId = challengeState.nodeId;
+            // Close complete screen, then restart same node
+            closeDrillCompleteScreenOnly();
+            setTimeout(() => startChallengeNode(nodeId), 50);
+        }
+
+        function closeDrillCompleteScreenOnly() {
+            document.getElementById('drill-complete-screen').classList.add('hidden');
+        }
+
+
+
+
+        function setLimperMix(preset) {
+            limperMixPreset = preset;
+            saveLimperMix();
+            updateLimperMixUI();
+        }
+        function updateLimperMixUI() {
+            const show = state.config.scenarios.includes('VS_LIMP');
+            const sec = document.getElementById('limper-mix-section');
+            if (sec) sec.classList.toggle('hidden', !show);
+            ['mostly1','liveish','multiway'].forEach(p => {
+                const btn = document.getElementById(`lmix-${p}`);
+                if (btn) btn.className = `config-btn py-3 rounded-lg text-[10px] font-bold ${p === limperMixPreset ? 'selected' : ''}`;
+            });
+        }
+
+        function buildDrillConfig() {
+            const medals = loadMedals();
+            const container = document.getElementById('drill-scenario-list');
+            container.innerHTML = '';
+            ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C'].forEach(sc => {
+                // Count medals for this scenario
+                let gC = 0, sC = 0, bC = 0;
+                Object.keys(medals).forEach(k => {
+                    if (k.startsWith(sc + '|')) {
+                        const m = medals[k].medal;
+                        if (m === 'gold') gC++;
+                        else if (m === 'silver') sC++;
+                        else if (m === 'bronze') bC++;
+                    }
+                });
+                const medalStr = [gC ? `🥇${gC}` : '', sC ? `🥈${sC}` : '', bC ? `🥉${bC}` : ''].filter(Boolean).join(' ');
+                const isSel = drillState.scenario === sc;
+                const btn = document.createElement('button');
+                btn.onclick = () => toggleDrillScenario(sc);
+                btn.id = `drill-sc-${sc}`;
+                btn.className = `config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center ${isSel ? 'selected' : ''}`;
+                btn.innerHTML = `<div class="flex flex-col gap-0.5">
+                    <span>${SCENARIO_NAMES[sc]}</span>
+                    ${medalStr ? `<span class="text-[10px] font-bold">${medalStr}</span>` : ''}
+                </div>
+                <span data-check="1">${isSel ? '✓' : ''}</span>`;
+                container.appendChild(btn);
+            });
+            // Build positions for drill
+            const posContainer = document.getElementById('drill-pos-list');
+            posContainer.innerHTML = '';
+            ALL_POSITIONS.forEach(p => {
+                const btn = document.createElement('button');
+                btn.onclick = () => toggleDrillPos(p);
+                btn.id = `drill-pos-${p}`;
+                btn.className = `config-btn py-3 rounded-lg text-xs font-black ${drillState.positions.includes(p) ? 'selected' : ''}`;
+                btn.innerText = POS_LABELS[p] || p;
+                posContainer.appendChild(btn);
+            });
+        }
+
+        function saveConfig() {
+            localStorage.setItem(profileKey('gto_config_v2'), JSON.stringify(state.config));
+        }
+        function loadConfig() {
+            try {
+                const s = localStorage.getItem(profileKey('gto_config_v2'));
+                if (s) {
+                    const c = JSON.parse(s);
+                    const validScenarios = ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C'];
+                    if (c.scenarios && Array.isArray(c.scenarios)) {
+                        state.config.scenarios = c.scenarios.filter(s => validScenarios.includes(s));
+                        if (state.config.scenarios.length === 0) state.config.scenarios = [...validScenarios];
+                    }
+                    if (c.positions && Array.isArray(c.positions)) {
+                        state.config.positions = c.positions.filter(p => ALL_POSITIONS.includes(p));
+                        if (state.config.positions.length === 0) state.config.positions = [...ALL_POSITIONS];
+                    }
+                }
+            } catch(e) {}
+        }
+
+        function updateConfigUI() {
+            // Open training
+            ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C'].forEach(s => {
+                const btn = document.getElementById(`cfg-${s}`);
+                if (!btn) return;
+                const isSel = state.config.scenarios.includes(s);
+                btn.className = `config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center ${isSel ? 'selected' : ''}`;
+                btn.querySelector('span').innerText = isSel ? '✓' : '';
+            });
+            ALL_POSITIONS.forEach(p => {
+                const btn = document.getElementById(`cfg-pos-${p}`);
+                if (!btn) return;
+                const isSel = state.config.positions.includes(p);
+                btn.className = `config-btn py-3 rounded-lg text-xs font-black ${isSel ? 'selected' : ''}`;
+            });
+            // Focused drill
+            ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C'].forEach(s => {
+                const btn = document.getElementById(`drill-sc-${s}`);
+                if (!btn) return;
+                const isSel = drillState.scenario === s;
+                btn.className = `config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center ${isSel ? 'selected' : ''}`;
+                const span = btn.querySelector('[data-check]');
+                if (span) span.innerText = isSel ? '✓' : '';
+            });
+            ALL_POSITIONS.forEach(p => {
+                const btn = document.getElementById(`drill-pos-${p}`);
+                if (!btn) return;
+                const isSel = drillState.positions.includes(p);
+                btn.className = `config-btn py-3 rounded-lg text-xs font-black ${isSel ? 'selected' : ''}`;
+            });
+            updateLimperMixUI();
+        }
+
+        function updateDrillCounter() {
+            if (drillState.active) {
+                document.getElementById('drill-counter').classList.remove('hidden');
+                document.getElementById('drill-progress').innerText = `${state.sessionStats.total}/${drillState.handCount}`;
+            } else {
+                document.getElementById('drill-counter').classList.add('hidden');
+            }
+        }
+
+        function checkDrillComplete() {
+            if (!drillState.active) return false;
+            if (state.sessionStats.total >= drillState.handCount) {
+                showDrillComplete();
+                return true;
+            }
+            return false;
+        }
+
+        function showDrillComplete() {
+            const total = state.sessionStats.total;
+            const correct = state.sessionStats.correct;
+            const accuracy = total ? Math.round(correct / total * 100) : 0;
+
+            const isChallenge = (typeof challengeState !== 'undefined' && challengeState && challengeState.active);
+
+            // === CHALLENGE MODE COMPLETE ===
+            if (isChallenge) {
+                const node = (typeof CHALLENGE_NODES !== 'undefined')
+                    ? CHALLENGE_NODES.find(n => n.id === challengeState.nodeId)
+                    : null;
+
+                const req = node ? node.acc : (challengeState.reqAcc || 0);
+                const passed = accuracy >= req;
+
+                try { finishChallengeAttempt(passed, accuracy); } catch(e) {}
+
+                const statusIcon = passed ? '✅' : '❌';
+                const statusText = passed ? 'Passed' : 'Not yet';
+                const statusColor = passed ? 'text-emerald-400' : 'text-rose-400';
+                const accColor = accuracy >= req ? 'text-emerald-400' : accuracy >= (req - 5) ? 'text-yellow-400' : 'text-rose-400';
+
+                let html = `
+                    <div class="text-center mb-2">
+                        <p class="text-emerald-400/80 font-bold uppercase tracking-[0.2em] text-xs mb-3">Challenge Complete</p>
+                        <p class="text-xl font-black text-white">${node ? node.title : 'Challenge'}</p>
+                        <p class="text-[11px] text-slate-500 mt-1">${node ? node.desc : ''}</p>
+                    </div>
+
+                    <div class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col items-center gap-3">
+                        <div class="text-5xl">${statusIcon}</div>
+                        <p class="text-lg font-black ${statusColor}">${statusText}</p>
+                        <div class="w-full bg-slate-950/50 border border-slate-800 rounded-xl p-3 text-center">
+                            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Target</p>
+                            <p class="text-sm font-black text-slate-200 mt-1">${total} hands · ${req}%+ accuracy</p>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-4 w-full mt-2">
+                            <div class="text-center">
+                                <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Accuracy</p>
+                                <p class="text-2xl font-black ${accColor}">${accuracy}%</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Correct</p>
+                                <p class="text-2xl font-black text-white">${correct}</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Needed</p>
+                                <p class="text-2xl font-black text-slate-200">${Math.max(0, Math.ceil(req/100*total) - correct)}</p>
+                            </div>
+                        </div>
+
+                        ${passed ? `
+                            <div class="w-full mt-1 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
+                                <p class="text-[11px] text-emerald-300 text-center font-bold">Node unlocked ✅</p>
+                            </div>
+                        ` : `
+                            <div class="w-full mt-1 bg-rose-500/10 border border-rose-500/20 rounded-xl p-3">
+                                <p class="text-[11px] text-rose-300 text-center font-bold">Retry to unlock the next node</p>
+                            </div>
+                        `}
+                    </div>
+
+                    <div class="flex flex-col gap-3 w-full mt-2">
+                        <button onclick="closeDrillComplete()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-black text-lg transition-all">Back to Challenge</button>
+                        <button onclick="retryChallenge()" class="w-full py-4 bg-slate-900 border border-slate-800 rounded-2xl font-black text-sm text-slate-300">Retry</button>
+                        <button onclick="endChallengeToMenu()" class="w-full py-4 bg-slate-900 border border-slate-800 rounded-2xl font-bold text-sm text-slate-500">Main Menu</button>
+                    </div>`;
+
+                document.getElementById('drill-complete-body').innerHTML = html;
+                document.getElementById('drill-complete-screen').classList.remove('hidden');
+                return;
+            }
+
+            // === NORMAL DRILL COMPLETE ===
+            const medal = getMedalForResult(total, accuracy);
+
+            // Save medal if it's an upgrade
+            const medals = loadMedals();
+            const scenarioKey = drillState.scenario;
+            // Medal is per-scenario (not per-position) for focused drills
+            const existing = medals[scenarioKey];
+            const isUpgrade = !existing || medalRank(medal) > medalRank(existing.medal);
+            if (medal !== 'none' && isUpgrade) {
+                medals[scenarioKey] = { medal, accuracy, hands: total, date: Date.now() };
+                saveMedals(medals);
+            }
+
+            const accColor = accuracy >= 90 ? 'text-emerald-400' : accuracy >= 75 ? 'text-yellow-400' : accuracy >= 60 ? 'text-orange-400' : 'text-rose-400';
+            const medalIcon = medal !== 'none' ? MEDAL_ICONS[medal] : '';
+            const medalLabel = medal !== 'none' ? medal.charAt(0).toUpperCase() + medal.slice(1) : '';
+            const medalColor = MEDAL_COLORS[medal] || '';
+            const scName = SCENARIO_NAMES[drillState.scenario] || drillState.scenario;
+
+            let html = `
+                <div class="text-center mb-2">
+                    <p class="text-slate-500 font-bold uppercase tracking-[0.2em] text-xs mb-3">Drill Complete</p>
+                    <p class="text-xl font-black text-white">${scName}</p>
+                </div>
+
+                <div class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col items-center gap-4">
+                    ${medal !== 'none' ? `
+                        <div class="medal-pop text-6xl mb-1">${medalIcon}</div>
+                        <p class="text-lg font-black ${medalColor}">${medalLabel}${isUpgrade ? ' — New Best!' : ''}</p>
+                    ` : `
+                        <p class="text-slate-500 font-bold text-sm">Keep practicing!</p>
+                    `}
+
+                    <div class="grid grid-cols-3 gap-4 w-full mt-2">
+                        <div class="text-center">
+                            <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Accuracy</p>
+                            <p class="text-2xl font-black ${accColor}">${accuracy}%</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Correct</p>
+                            <p class="text-2xl font-black text-white">${correct}</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-[9px] text-slate-500 uppercase font-bold mb-1">Best Streak</p>
+                            <p class="text-2xl font-black text-orange-400">${state.global.bestStreak || 0}</p>
+                        </div>
+
+                    </div>
+
+                    ${medal === 'none' ? `
+                        <div class="w-full mt-2 bg-slate-800 rounded-xl p-3">
+                            <p class="text-[10px] text-slate-400 text-center">Next: 🥉 Bronze — ${MEDAL_THRESHOLDS.bronze.accuracy}% accuracy on ${MEDAL_THRESHOLDS.bronze.hands}+ hands</p>
+                        </div>
+                    ` : medal === 'bronze' ? `
+                        <div class="w-full mt-2 bg-slate-800 rounded-xl p-3">
+                            <p class="text-[10px] text-slate-400 text-center">Next: 🥈 Silver — ${MEDAL_THRESHOLDS.silver.accuracy}% accuracy on ${MEDAL_THRESHOLDS.silver.hands}+ hands</p>
+                        </div>
+                    ` : medal === 'silver' ? `
+                        <div class="w-full mt-2 bg-slate-800 rounded-xl p-3">
+                            <p class="text-[10px] text-slate-400 text-center">Next: 🥇 Gold — ${MEDAL_THRESHOLDS.gold.accuracy}% accuracy on ${MEDAL_THRESHOLDS.gold.hands}+ hands</p>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="flex flex-col gap-3 w-full mt-2">
+                    <button onclick="continueDrill()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-black text-lg transition-all">Keep Going</button>
+                    <button onclick="closeDrillComplete()" class="w-full py-4 bg-slate-900 border border-slate-800 rounded-2xl font-bold text-sm text-slate-500">Done</button>
+                </div>`;
+
+            document.getElementById('drill-complete-body').innerHTML = html;
+            document.getElementById('drill-complete-screen').classList.remove('hidden');
+        }
+
+
+        function closeDrillComplete() {
+            document.getElementById('drill-complete-screen').classList.add('hidden');
+
+            // If we just finished a challenge, go back to Challenge screen (not Menu)
+            if (typeof challengeState !== 'undefined' && challengeState && challengeState.active) {
+                // Keep nodeId around for the Challenge screen, but end the active run
+                challengeState.active = false;
+                exitToChallenge();
+                return;
+            }
+
+            if (drillState._savedConfig) {
+                state.config = drillState._savedConfig;
+                drillState._savedConfig = null;
+            }
+            drillState.active = false;
+            exitToMenu();
+        }
+
+
+        function showLibrary() {
+            document.getElementById('library-screen').classList.remove('hidden');
+            renderLibrary();
+        }
+
+        function hideLibrary() {
+            document.getElementById('library-screen').classList.add('hidden');
+        }
+
+        function setLibCategory(cat) {
+            state.libCategory = cat;
+            renderLibrary();
+        }
+
+        function renderLibrary() {
+            const content = document.getElementById('lib-content');
+            content.innerHTML = '';
+            
+            // Update tabs
+            ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C'].forEach(tab => {
+                const btn = document.getElementById(`lib-tab-${tab}`);
+                btn.className = `whitespace-nowrap px-6 py-2 rounded-full font-bold text-sm ${state.libCategory === tab ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400'}`;
+            });
+
+            let spots = [];
+            if (state.libCategory === 'RFI') {
+                spots = Object.keys(rfiRanges).map(p => ({ pos: p, opp: null, data: rfiRanges[p] }));
+            } else if (state.libCategory === 'FACING_RFI') {
+                spots = Object.keys(facingRfiRanges).map(k => {
+                    const [p, o] = k.split('_vs_');
+                    return { pos: p, opp: o, data: facingRfiRanges[k] };
+                });
+            } else if (state.libCategory === 'VS_LIMP') {
+                spots = Object.keys(allFacingLimps).map(k => {
+                    const m = k.match(/(.+)_vs_(.+)_Limp/);
+                    return { pos: m[1], opp: m[2], data: allFacingLimps[k] };
+                });
+            } else if (state.libCategory === 'SQUEEZE') {
+                spots = Object.keys(squeezeRanges).map(k => {
+                    const p = parseSqueezeKey(k);
+                    return { pos: p.hero, opp: p.opener, caller: p.caller, data: squeezeRanges[k], squeezeKey: k };
+                });
+            } else if (state.libCategory === 'SQUEEZE_2C') {
+                spots = Object.keys(squeezeVsRfiTwoCallers).map(k => {
+                    const p = parseSqueeze2CKey(k);
+                    return { pos: p.hero, opp: p.opener, caller: p.caller1, caller2: p.caller2, data: squeezeVsRfiTwoCallers[k], squeezeKey: k };
+                });
+            } else {
+                spots = Object.keys(rfiVs3BetRanges).map(k => {
+                    const [p, o] = k.split('_vs_');
+                    return { pos: p, opp: o, data: rfiVs3BetRanges[k] };
+                });
+            }
+
+            spots.forEach((spot, spotIdx) => {
+                const card = document.createElement('div');
+                card.className = "bg-slate-900 border border-slate-800 rounded-3xl p-5 flex flex-col items-center gap-4";
+                
+                const title = spot.caller2
+                    ? `${POS_LABELS[spot.pos]} vs ${POS_LABELS[spot.opp]} open, ${POS_LABELS[spot.caller]} & ${POS_LABELS[spot.caller2]} call`
+                    : spot.caller
+                    ? `${POS_LABELS[spot.pos]} vs ${POS_LABELS[spot.opp]} open, ${POS_LABELS[spot.caller]} call`
+                    : spot.opp ? `${POS_LABELS[spot.pos]} vs ${POS_LABELS[spot.opp]}` : `${POS_LABELS[spot.pos]} Open`;
+                
+                const gridId = `lib-grid-${spotIdx}`;
+                const renderGrid = (data) => {
+                    let g = '';
+                    for (let i = 0; i < 13; i++) {
+                        for (let j = 0; j < 13; j++) {
+                            const r1 = RANKS[i], r2 = RANKS[j];
+                            let hKey = (i === j) ? r1 + r2 : (i < j ? r1 + r2 + 's' : r2 + r1 + 'o');
+                            let bg = 'bg-slate-950';
+                            
+                            if (state.libCategory === 'RFI') {
+                                if (checkRangeHelper(hKey, data)) bg = 'bg-indigo-600';
+                            } else if (state.libCategory === 'VS_LIMP') {
+                                if (checkRangeHelper(hKey, getLimpRaise(data))) bg = 'bg-orange-600';
+                                else if (checkRangeHelper(hKey, getLimpPassive(data))) bg = 'bg-cyan-700';
+                            } else if (state.libCategory === 'SQUEEZE') {
+                                if (checkRangeHelper(hKey, data["Squeeze"])) { bg = 'bg-red-600'; if (isSqueezeBluff(hKey, data)) bg = 'bg-red-600 sq-bluff-stripe'; }
+                                else if (data["Call"] && checkRangeHelper(hKey, data["Call"])) bg = 'bg-emerald-600';
+                            } else if (state.libCategory === 'SQUEEZE_2C') {
+                                if (checkRangeHelper(hKey, data["Squeeze"])) { bg = 'bg-red-600'; if (isSqueezeBluff(hKey, data)) bg = 'bg-red-600 sq-bluff-stripe'; }
+                                else if (data["Call"] && checkRangeHelper(hKey, data["Call"])) bg = 'bg-emerald-600';
+                            } else {
+                                if (checkRangeHelper(hKey, data["3-bet"] || data["4-bet"])) bg = 'bg-indigo-600';
+                                else if (checkRangeHelper(hKey, data["Call"])) bg = 'bg-emerald-600';
+                            }
+                            g += `<div class="aspect-square rounded-[1px] ${bg}"></div>`;
+                        }
+                    }
+                    return g;
+                };
+
+                let gridHtml = `<div id="${gridId}" class="range-grid w-full gap-[0.5px]">${renderGrid(spot.data)}</div>`;
+
+                // Bucket toggle for VS_LIMP library cards
+                let bucketToggleHtml = '';
+                if (state.libCategory === 'VS_LIMP') {
+                    bucketToggleHtml = `<div class="flex gap-1.5" id="lib-btog-${spotIdx}">` +
+                        ['1L','2L','3P'].map(b => {
+                            const sel = b === '1L';
+                            const lab = b === '1L' ? '1L' : b === '2L' ? '2L' : '3+L';
+                            return `<button data-bucket="${b}" onclick="switchLibBucket(${spotIdx},'${spot.pos}','${spot.opp}','${b}')" class="px-2 py-0.5 rounded-full text-[8px] font-bold transition-all ${sel ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'}">${lab}</button>`;
+                        }).join('') + '</div>';
+                }
+
+                card.innerHTML = `
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${title}</p>
+                    ${bucketToggleHtml}
+                    ${gridHtml}
+                    <button onclick="zoomSpot('${spot.pos}', '${spot.squeezeKey || spot.opp || ''}', '${state.libCategory}', ${spotIdx})" class="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">Full View</button>
+                `;
+
+                // Store render function for bucket switching
+                if (state.libCategory === 'VS_LIMP') {
+                    card._renderGrid = renderGrid;
+                    card._gridId = gridId;
+                }
+
+                content.appendChild(card);
+            });
+        }
+
+        function switchLibBucket(spotIdx, pos, opp, bucket) {
+            const gridEl = document.getElementById(`lib-grid-${spotIdx}`);
+            const togEl = document.getElementById(`lib-btog-${spotIdx}`);
+            if (!gridEl || !togEl) return;
+            // Store active bucket on the toggle element for Full View to read
+            togEl.dataset.activeBucket = bucket;
+            const data = getLimpDataForBucket(pos, opp, bucket) || allFacingLimps[`${pos}_vs_${opp}_Limp`];
+            if (!data) return;
+            // Re-render grid
+            let g = '';
+            for (let i = 0; i < 13; i++) {
+                for (let j = 0; j < 13; j++) {
+                    const r1 = RANKS[i], r2 = RANKS[j];
+                    let hKey = (i === j) ? r1 + r2 : (i < j ? r1 + r2 + 's' : r2 + r1 + 'o');
+                    let bg = 'bg-slate-950';
+                    if (checkRangeHelper(hKey, getLimpRaise(data))) bg = 'bg-orange-600';
+                    else if (checkRangeHelper(hKey, getLimpPassive(data))) bg = 'bg-cyan-700';
+                    g += `<div class="aspect-square rounded-[1px] ${bg}"></div>`;
+                }
+            }
+            gridEl.innerHTML = g;
+            // Update toggle button styles
+            togEl.querySelectorAll('button').forEach(btn => {
+                const b = btn.dataset.bucket;
+                if (b === bucket) { btn.className = 'px-2 py-0.5 rounded-full text-[8px] font-bold transition-all bg-indigo-600 text-white'; }
+                else { btn.className = 'px-2 py-0.5 rounded-full text-[8px] font-bold transition-all bg-slate-800 text-slate-500 hover:text-slate-300'; }
+            });
+        }
+
+        function zoomSpot(pos, opp, cat, spotIdx) {
+            _chartIsReview = true;
+            if (cat === 'VS_LIMP') {
+                // Read active bucket from library card toggle if available
+                const togEl = spotIdx != null && document.getElementById(`lib-btog-${spotIdx}`);
+                state.limperBucket = (togEl && togEl.dataset.activeBucket) || '1L';
+            }
+            showChart(pos, null, cat, opp);
+        }
+
+        // --- TRAINER LOGIC ---
+
+        function generateNextRound() {
+            const srDb = SR.getAll();
+
+            if (reviewSession.active) {
+                // SR-driven review: hand-level keys like "FACING_RFI|CO_vs_UTG|AKs"
+                if (reviewSession.answered >= reviewSession.maxQ) {
+                    reviewSession.active = false;
+                    exitToMenu();
+                    return;
+                }
+                const handLevelKey = SR.selectSpot(reviewSession.queue, reviewSession.recentKeys);
+                reviewSession.recentKeys.push(handLevelKey);
+                reviewSession.answered++;
+
+                // Parse hand-level key: last segment is hand, rest is spotKey
+                const lastPipe = handLevelKey.lastIndexOf('|');
+                const reviewHand = handLevelKey.substring(lastPipe + 1);
+                const spotKeyPart = handLevelKey.substring(0, lastPipe);
+                const parts = spotKeyPart.split('|');
+                state.scenario = parts[0];
+                // Override hand if it's a real hand (not _LEGACY)
+                state._reviewHandOverride = (reviewHand && reviewHand !== '_LEGACY' && reviewHand.length <= 4) ? reviewHand : null;
+
+                if (state.scenario === 'RFI') {
+                    state.currentPos = parts[1];
+                    state.oppPos = '';
+                } else if (state.scenario === 'VS_LIMP') {
+                    const m = parts[1].match(/(.+)_vs_(.+)_Limp/);
+                    state.currentPos = m ? m[1] : 'BTN';
+                    state.oppPos = m ? m[2] : 'UTG';
+                    const possibleBucket = parts[2];
+                    if (possibleBucket === '1L' || possibleBucket === '2L' || possibleBucket === '3P') {
+                        state.limperBucket = possibleBucket;
+                    } else {
+                        state.limperBucket = '1L';
+                    }
+                    if (state.limperBucket === '1L') {
+                        state.limperPositions = [state.oppPos];
+                    } else {
+                        const numL = state.limperBucket === '2L' ? 2 : 3;
+                        let limpers = generateLimperPositions(numL, state.currentPos);
+                        if (!limpers.includes(state.oppPos)) {
+                            if (limpers.length >= numL) limpers[limpers.length - 1] = state.oppPos;
+                            else limpers.push(state.oppPos);
+                            const ao = ['UTG','UTG1','UTG2','LJ','HJ','CO','BTN','SB','BB'];
+                            limpers.sort((a, b) => ao.indexOf(a) - ao.indexOf(b));
+                        }
+                        state.limperPositions = limpers;
+                        state.oppPos = limpers[0];
+                    }
+                } else if (state.scenario === 'SQUEEZE') {
+                    const p = parseSqueezeKey(parts[1]);
+                    state.currentPos = p.hero;
+                    state.squeezeOpener = p.opener;
+                    state.squeezeCaller = p.caller;
+                    state.oppPos = parts[1];
+                } else if (state.scenario === 'SQUEEZE_2C') {
+                    const p = parseSqueeze2CKey(parts[1]);
+                    state.currentPos = p.hero;
+                    state.squeezeOpener = p.opener;
+                    state.squeezeCaller = p.caller1;
+                    state.squeezeCaller2 = p.caller2;
+                    state.oppPos = parts[1];
+                } else {
+                    const [p, o] = parts[1].split('_vs_');
+                    state.currentPos = p; state.oppPos = o;
+                }
+            } else {
+                // Normal training: random scenario/spot respecting config
+                const validScenarios = state.config.scenarios.filter(s => {
+                    if (s === 'RFI') return state.config.positions.some(p => rfiRanges[p]);
+                    if (s === 'FACING_RFI') return state.config.positions.some(p => Object.keys(facingRfiRanges).some(k => k.startsWith(p + '_vs_')));
+                    if (s === 'RFI_VS_3BET') return state.config.positions.some(p => Object.keys(rfiVs3BetRanges).some(k => k.startsWith(p + '_vs_')));
+                    if (s === 'VS_LIMP') { const lp = state.config.positions; return Object.keys(allFacingLimps).some(k => { const m = k.match(/(.+)_vs_(.+)_Limp/); return m && lp.includes(m[1]); }); }
+                    if (s === 'SQUEEZE') { return Object.keys(squeezeRanges).some(k => { const p = parseSqueezeKey(k); return p && state.config.positions.includes(p.hero); }); }
+                    if (s === 'SQUEEZE_2C') { return Object.keys(squeezeVsRfiTwoCallers).some(k => { const p = parseSqueeze2CKey(k); return p && state.config.positions.includes(p.hero); }); }
+                    return false;
+                });
+                if (!validScenarios.length) { console.warn('[Trainer] No valid scenarios for config:', JSON.stringify(state.config)); return; }
+                console.log('[Trainer] Config scenarios:', state.config.scenarios, '→ valid:', validScenarios);
+
+                // 80/20 due-item priority: if SR has due hands matching config, pick from due set 80% of the time
+                let usedDuePick = false;
+                const validScSet = new Set(validScenarios);
+                const dueKeys = SR.getDueSpots(false).filter(k => {
+                    const parts = k.split('|');
+                    if (!validScSet.has(parts[0])) return false;
+                    // Check position is in config
+                    const spotId = parts[1] || '';
+                    const heroPos = spotId.split('_vs_')[0].replace(/_Limp$/, '');
+                    if (parts[0] === 'SQUEEZE') {
+                        const sq = parseSqueezeKey(spotId);
+                        return sq && state.config.positions.includes(sq.hero);
+                    }
+                    if (parts[0] === 'SQUEEZE_2C') {
+                        const sq = parseSqueeze2CKey(spotId);
+                        return sq && state.config.positions.includes(sq.hero);
+                    }
+                    return state.config.positions.includes(heroPos);
+                });
+                if (dueKeys.length > 0 && Math.random() < 0.8) {
+                    const dueKey = dueKeys[Math.floor(Math.random() * dueKeys.length)];
+                    const lastPipe = dueKey.lastIndexOf('|');
+                    const spotKeyPart = dueKey.substring(0, lastPipe);
+                    const dueHand = dueKey.substring(lastPipe + 1);
+                    const parts = spotKeyPart.split('|');
+                    state.scenario = parts[0];
+                    if (state.scenario === 'RFI') {
+                        state.currentPos = parts[1]; state.oppPos = '';
+                    } else if (state.scenario === 'VS_LIMP') {
+                        const m = parts[1].match(/(.+)_vs_(.+)_Limp/);
+                        state.currentPos = m ? m[1] : 'BTN'; state.oppPos = m ? m[2] : 'UTG';
+                        // Extract limper bucket from SR key if present (part after _Limp| e.g. "|2L")
+                        // SR keys: VS_LIMP|BTN_vs_UTG_Limp|2L|AKs - bucket is parts[2] if it matches
+                        const possibleBucket = parts[2];
+                        if (possibleBucket === '1L' || possibleBucket === '2L' || possibleBucket === '3P') {
+                            state.limperBucket = possibleBucket;
+                        } else {
+                            state.limperBucket = '1L';
+                        }
+                        if (state.limperBucket === '1L') {
+                            state.limperPositions = [state.oppPos];
+                        } else {
+                            const numL = state.limperBucket === '2L' ? 2 : 3;
+                            let limpers = generateLimperPositions(numL, state.currentPos);
+                            if (!limpers.includes(state.oppPos)) {
+                                if (limpers.length >= numL) limpers[limpers.length - 1] = state.oppPos;
+                                else limpers.push(state.oppPos);
+                                const ao = ['UTG','UTG1','UTG2','LJ','HJ','CO','BTN','SB','BB'];
+                                limpers.sort((a, b) => ao.indexOf(a) - ao.indexOf(b));
+                            }
+                            state.limperPositions = limpers;
+                            state.oppPos = limpers[0];
+                        }
+                    } else if (state.scenario === 'SQUEEZE') {
+                        const p = parseSqueezeKey(parts[1]);
+                        if (p) { state.currentPos = p.hero; state.squeezeOpener = p.opener; state.squeezeCaller = p.caller; state.oppPos = parts[1]; }
+                    } else if (state.scenario === 'SQUEEZE_2C') {
+                        const p = parseSqueeze2CKey(parts[1]);
+                        if (p) { state.currentPos = p.hero; state.squeezeOpener = p.opener; state.squeezeCaller = p.caller1; state.squeezeCaller2 = p.caller2; state.oppPos = parts[1]; }
+                    } else {
+                        const [p, o] = parts[1].split('_vs_');
+                        state.currentPos = p; state.oppPos = o;
+                    }
+                    // Override hand selection with the due hand if valid
+                    if (dueHand && dueHand !== '_LEGACY' && dueHand.length <= 4) {
+                        state._reviewHandOverride = dueHand;
+                    }
+                    usedDuePick = true;
+                }
+
+                if (!usedDuePick) {
+                state.scenario = validScenarios[Math.floor(Math.random() * validScenarios.length)];
+                if (state.scenario === 'RFI') {
+                    const avail = state.config.positions.filter(p => rfiRanges[p]);
+                    state.currentPos = avail[Math.floor(Math.random() * avail.length)];
+                    state.oppPos = '';
+                } else if (state.scenario === 'FACING_RFI') {
+                    const pairs = Object.keys(facingRfiRanges).filter(p => state.config.positions.includes(p.split('_vs_')[0]));
+                    const key = pairs[Math.floor(Math.random() * pairs.length)];
+                    [state.currentPos, state.oppPos] = key.split('_vs_');
+                
+    } else if (state.scenario === 'RFI_VS_3BET' || state.scenario === 'RFI_VS_3') {
+        const villain3bet$ = get3betSize$(state.oppPos, state.currentPos);
+        const heroIP = postflopIP(state.currentPos, state.oppPos);
+        const fourBet$ = get4betSize$(state.currentPos, state.oppPos);
+        const main = `4-BET TO ${fmt$(fourBet$)}`;
+        const hint = heroIP ? `4-bet IP: 2.2× 3-bet (${fmt$(villain3bet$)})` : `4-bet OOP: 2.5× 3-bet (${fmt$(villain3bet$)})`;
+        setSizingHint(hint);
+        container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
+            <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
+            <button onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
+            <button onclick="handleInput('4BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">${main}</button>
+        </div>`;
+} else if (state.scenario === 'VS_LIMP') {
+                    // Filter limp keys to enabled hero positions
+                    const limpKeys = Object.keys(allFacingLimps).filter(k => {
+                        const m = k.match(/(.+)_vs_(.+)_Limp/);
+                        return m && state.config.positions.includes(m[1]);
+                    });
+                    const key = limpKeys[Math.floor(Math.random() * limpKeys.length)];
+                    const m = key.match(/(.+)_vs_(.+)_Limp/);
+                    state.currentPos = m[1];
+                    state.oppPos = m[2]; // firstLimper position
+                    // Pick limper bucket
+                    state.limperBucket = pickLimperBucket();
+                    // Generate limper positions for multi-limp
+                    if (state.limperBucket === '1L') {
+                        state.limperPositions = [state.oppPos];
+                    } else {
+                        const numLimpers = state.limperBucket === '2L' ? 2 : 3;
+                        let limpers = generateLimperPositions(numLimpers, state.currentPos);
+                        // Ensure firstLimper is in the list (it anchors the base range)
+                        if (!limpers.includes(state.oppPos)) {
+                            // Replace a random non-first limper or add
+                            if (limpers.length >= numLimpers) limpers[limpers.length - 1] = state.oppPos;
+                            else limpers.push(state.oppPos);
+                            const actionOrder = ['UTG','UTG1','UTG2','LJ','HJ','CO','BTN','SB','BB'];
+                            limpers.sort((a, b) => actionOrder.indexOf(a) - actionOrder.indexOf(b));
+                        }
+                        state.limperPositions = limpers;
+                        // oppPos stays as first limper (for range lookup)
+                        state.oppPos = limpers[0];
+                    }
+                } else if (state.scenario === 'SQUEEZE') {
+                    const sqKeys = Object.keys(squeezeRanges).filter(k => {
+                        const p = parseSqueezeKey(k);
+                        return p && state.config.positions.includes(p.hero);
+                    });
+                    const key = sqKeys[Math.floor(Math.random() * sqKeys.length)];
+                    const p = parseSqueezeKey(key);
+                    state.currentPos = p.hero;
+                    state.squeezeOpener = p.opener;
+                    state.squeezeCaller = p.caller;
+                    state.oppPos = key; // full key for data lookup
+                } else if (state.scenario === 'SQUEEZE_2C') {
+                    const sqKeys = Object.keys(squeezeVsRfiTwoCallers).filter(k => {
+                        const p = parseSqueeze2CKey(k);
+                        return p && state.config.positions.includes(p.hero);
+                    });
+                    const key = sqKeys[Math.floor(Math.random() * sqKeys.length)];
+                    const p = parseSqueeze2CKey(key);
+                    state.currentPos = p.hero;
+                    state.squeezeOpener = p.opener;
+                    state.squeezeCaller = p.caller1;
+                    state.squeezeCaller2 = p.caller2;
+                    state.oppPos = key;
+                } else {
+                    const pairs = Object.keys(rfiVs3BetRanges).filter(p => state.config.positions.includes(p.split('_vs_')[0]));
+                    const key = pairs[Math.floor(Math.random() * pairs.length)];
+                    [state.currentPos, state.oppPos] = key.split('_vs_');
+                }
+                } // end if (!usedDuePick)
+            }
+
+            // Set scenario hint text
+            if (state.scenario === 'RFI') {
+                document.getElementById('scenario-hint').innerText = "Folded to you...";
+            } else if (state.scenario === 'FACING_RFI') {
+                document.getElementById('scenario-hint').innerText = `${POS_LABELS[state.oppPos]} raises to ${fmt$(getOpenSize$())}...`;
+            } else if (state.scenario === 'VS_LIMP') {
+                if (state.limperBucket === '3P') {
+                    document.getElementById('scenario-hint').innerText = `3+ limp pot, you're on ${POS_LABELS[state.currentPos]}...`;
+                } else if (state.limperBucket === '2L') {
+                    const l1 = POS_LABELS[state.limperPositions[0]] || '?';
+                    const l2 = POS_LABELS[state.limperPositions[1]] || '?';
+                    document.getElementById('scenario-hint').innerText = `${l1} & ${l2} limp, you're on ${POS_LABELS[state.currentPos]}...`;
+                } else {
+                    document.getElementById('scenario-hint').innerText = `${POS_LABELS[state.oppPos]} limps, you're on ${POS_LABELS[state.currentPos]}...`;
+                }
+            } else if (state.scenario === 'SQUEEZE') {
+                document.getElementById('scenario-hint').innerText = `${POS_LABELS[state.squeezeOpener]} opens, ${POS_LABELS[state.squeezeCaller]} calls...`;
+            } else if (state.scenario === 'SQUEEZE_2C') {
+                document.getElementById('scenario-hint').innerText = `${POS_LABELS[state.squeezeOpener]} opens, ${POS_LABELS[state.squeezeCaller]} and ${POS_LABELS[state.squeezeCaller2]} call...`;
+            } else {
+                document.getElementById('scenario-hint').innerText = `You raised, ${POS_LABELS[state.oppPos]} 3-bets to ${bbTo$(15)}...`;
+            }
+
+            // Sample hand using EdgeWeight (edge-case focus), or use review override
+            if (state._reviewHandOverride) {
+                state.currentHand = state._reviewHandOverride;
+                state._reviewHandOverride = null;
+            } else {
+                const missBoostData = {
+                    byHand: state.global.byHand || {},
+                    recentHandKeys: state.recentHandKeys || []
+                };
+                state.currentHand = EdgeWeight.sampleHand(state.scenario, state.currentPos, state.oppPos, srDb, missBoostData);
+                // Track for variety guard
+                const oppSuffix = state.scenario === 'VS_LIMP' ? '_Limp' : '';
+                let curSRKey;
+                if (state.scenario === 'SQUEEZE' || state.scenario === 'SQUEEZE_2C') curSRKey = `${state.scenario}|${state.oppPos}|${state.currentHand}`;
+                else if (state.scenario === 'VS_LIMP') curSRKey = `${state.scenario}|${state.currentPos}_vs_${state.oppPos}_Limp|${state.limperBucket}|${state.currentHand}`;
+                else curSRKey = `${state.scenario}|${state.currentPos}${state.oppPos ? '_vs_' + state.oppPos + oppSuffix : ''}|${state.currentHand}`;
+                state.recentHandKeys.push(curSRKey);
+                if (state.recentHandKeys.length > 10) state.recentHandKeys = state.recentHandKeys.slice(-10);
+            }
+
+            // Immediately show card backs and dimmed buttons so layout is stable
+            renderHeroCardBacks();
+            renderButtons(true); // hidden state
+            clearToast();
+
+            // Run the animated table sequence, then flip cards + reveal buttons
+            runTableAnimation(state.currentPos, state.oppPos, state.scenario, () => {
+                renderHand(state.currentHand);
+                // Flip after a tick so the DOM settles
+                requestAnimationFrame(() => flipHeroCards());
+                revealButtons();
+            });
+        }
+
+        function handleInput(action) {
+            // Immediately disable buttons to prevent double-clicks
+            const grid = document.querySelector('#action-buttons > div');
+            if (grid) { grid.classList.remove('action-buttons-revealed'); grid.classList.add('action-buttons-hidden'); }
+
+            let correctAction;
+            if (state.scenario === 'RFI') {
+                correctAction = checkRangeHelper(state.currentHand, rfiRanges[state.currentPos]) ? 'RAISE' : 'FOLD';
+            } else if (state.scenario === 'FACING_RFI') {
+                const data = facingRfiRanges[`${state.currentPos}_vs_${state.oppPos}`];
+                if (checkRangeHelper(state.currentHand, data["3-bet"])) correctAction = "3BET";
+                else if (data["Call"].length > 0 && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+                else correctAction = "FOLD";
+            } else if (state.scenario === 'VS_LIMP') {
+                const data = getLimpDataForBucket(state.currentPos, state.oppPos, state.limperBucket) || allFacingLimps[`${state.currentPos}_vs_${state.oppPos}_Limp`];
+                if (checkRangeHelper(state.currentHand, getLimpRaise(data))) correctAction = "ISO";
+                else if (isLimpBBSpot(data)) correctAction = "OVERLIMP"; // BB can't fold
+                else if (checkRangeHelper(state.currentHand, getLimpPassive(data))) correctAction = "OVERLIMP";
+                else correctAction = "FOLD";
+            } else if (state.scenario === 'SQUEEZE') {
+                const data = squeezeRanges[state.oppPos];
+                if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
+                else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+                else correctAction = "FOLD";
+            } else if (state.scenario === 'SQUEEZE_2C') {
+                const data = squeezeVsRfiTwoCallers[state.oppPos];
+                if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
+                else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+                else correctAction = "FOLD";
+            } else {
+                const data = rfiVs3BetRanges[`${state.currentPos}_vs_${state.oppPos}`];
+                if (checkRangeHelper(state.currentHand, data["4-bet"])) correctAction = "4BET";
+                else if (checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+                else correctAction = "FOLD";
+            }
+
+            const correct = action === correctAction;
+            state.sessionStats.total++; state.global.totalHands++;
+
+            // Track per-scenario stats
+            const sc = state.scenario;
+            const hp = state.currentPos;
+            const spotKey = sc === 'RFI' ? `${sc}|${hp}` : sc === 'VS_LIMP' ? `${sc}|${hp}_vs_${state.oppPos}_Limp|${state.limperBucket}` : (sc === 'SQUEEZE' || sc === 'SQUEEZE_2C') ? `${sc}|${state.oppPos}` : `${sc}|${hp}_vs_${state.oppPos}`;
+
+            // Update SR for this hand within the spot
+            const handSRKey = `${spotKey}|${state.currentHand}`;
+            const srGrade = correct ? 'Good' : 'Again';
+            SR.update(handSRKey, srGrade);
+            
+            if (!state.global.byScenario[sc]) state.global.byScenario[sc] = { total: 0, correct: 0 };
+            state.global.byScenario[sc].total++;
+
+            if (!state.global.byPos[hp]) state.global.byPos[hp] = { total: 0, correct: 0 };
+            state.global.byPos[hp].total++;
+            const pg = normalizePos(hp);
+            if (!state.global.byPosGroup[pg]) state.global.byPosGroup[pg] = { total: 0, correct: 0 };
+            state.global.byPosGroup[pg].total++;
+            if (!state.global.bySpot[spotKey]) state.global.bySpot[spotKey] = { total: 0, correct: 0 };
+            state.global.bySpot[spotKey].total++;
+
+            // Track per-hand stats within a spot (e.g. "RFI|BTN|AKs")
+            const handKey = `${spotKey}|${state.currentHand}`;
+            if (!state.global.byHand[handKey]) state.global.byHand[handKey] = { total: 0, correct: 0 };
+            state.global.byHand[handKey].total++;
+
+            // Track miss metadata for mistake-prioritization (does not touch SR)
+            if (!correct) {
+                state.global.byHand[handKey].lastMissedAt = Date.now();
+                state.global.byHand[handKey].recentMissCount = (state.global.byHand[handKey].recentMissCount || 0) + 1;
+            }
+
+            // Detect squeeze bluffs
+            let _isBluff = false;
+            if (correctAction === 'SQUEEZE' && (sc === 'SQUEEZE' || sc === 'SQUEEZE_2C')) {
+                const sqData = sc === 'SQUEEZE' ? squeezeRanges[state.oppPos] : squeezeVsRfiTwoCallers[state.oppPos];
+                _isBluff = isSqueezeBluff(state.currentHand, sqData);
+            }
+
+            // Session log entry
+            const logEntry = {
+                hand: state.currentHand, pos: hp, oppPos: state.oppPos,
+                scenario: sc, action: action, correctAction: correctAction,
+                correct: correct, spotKey: spotKey, isBluff: _isBluff,
+                limperBucket: state.limperBucket, limperPositions: state.limperPositions ? [...state.limperPositions] : []
+            };
+            state.sessionLog.unshift(logEntry); // newest first
+            
+            if (correct) {
+                state.sessionStats.correct++; state.global.totalCorrect++; state.sessionStats.streak++;
+                state.global.byScenario[sc].correct++;
+                state.global.byPos[hp].correct++;
+                state.global.byPosGroup[normalizePos(hp)].correct++;
+                state.global.bySpot[spotKey].correct++;
+                state.global.byHand[handKey].correct++;
+                if (state.sessionStats.streak > (state.global.bestStreak || 0)) state.global.bestStreak = state.sessionStats.streak;
+                // Tag bluff squeezes in correct toast
+                if (correctAction === 'SQUEEZE' && (sc === 'SQUEEZE' || sc === 'SQUEEZE_2C')) {
+                    const sqData2 = sc === 'SQUEEZE' ? squeezeRanges[state.oppPos] : squeezeVsRfiTwoCallers[state.oppPos];
+                    if (isSqueezeBluff(state.currentHand, sqData2)) {
+                        showToast("Correct · Squeeze (Bluff)", "correct", 700);
+                    } else {
+                        showToast("Correct", "correct", 500);
+                    }
+                } else {
+                    showToast("Correct", "correct", 500);
+                }
+
+                // Visual-only: slide hero bet chip onto table for correct betting actions
+                const __bet$ = computeHeroBetDollarsForAction(action);
+                if (__bet$ != null) animateHeroBetDollars(__bet$);
+
+                updateUI(); saveProgress(); setTimeout(() => { if (!checkDrillComplete()) generateNextRound(); }, 600);
+            } else {
+                state.sessionStats.streak = 0;
+                let correctLabel = ACTION_LABELS[correctAction] || correctAction;
+                // SB/BB vs limp uses different terminology
+                if (state.scenario === 'VS_LIMP' && (state.currentPos === 'SB' || state.currentPos === 'BB')) {
+                    if (correctAction === 'ISO') correctLabel = 'Raise';
+                    else if (correctAction === 'OVERLIMP') correctLabel = state.currentPos === 'BB' ? 'Check' : 'Complete';
+                }
+                // Tag squeeze bluffs
+                if (correctAction === 'SQUEEZE' && (state.scenario === 'SQUEEZE' || state.scenario === 'SQUEEZE_2C')) {
+                    const sqData = state.scenario === 'SQUEEZE' ? squeezeRanges[state.oppPos] : squeezeVsRfiTwoCallers[state.oppPos];
+                    if (isSqueezeBluff(state.currentHand, sqData)) correctLabel = 'Squeeze (Bluff)';
+                }
+                showToast(`Incorrect · ${correctLabel}`, "incorrect", 1500);
+                updateUI(); saveProgress();
+                setTimeout(() => showChart(state.currentPos, state.currentHand, state.scenario, state.oppPos), 800);
+            
+                // FAIL-SAFE: if chart doesn't show or user backs out, don't freeze on the same hand
+                setTimeout(() => {
+                    const trainerHidden = document.getElementById('trainer-screen')?.classList?.contains('hidden');
+                    const chartHidden = document.getElementById('chart-modal')?.classList?.contains('hidden');
+                    if (trainerHidden) return;
+                    if (chartHidden && !checkDrillComplete()) generateNextRound();
+                }, 2500);
 }
-
-function finishChallengeAttempt(passed, accuracy) {
-    const progress = getChallengeProgress();
-    const nodeId = challengeState.nodeId;
-    const node = (typeof CHALLENGE_NODES !== 'undefined') ? CHALLENGE_NODES.find(n => n.id === nodeId) : null;
-    const req = node ? node.acc : (challengeState.reqAcc || 0);
-
-    const rec = progress.nodes[nodeId] || {};
-    const acc = (typeof accuracy === 'number' && !Number.isNaN(accuracy)) ? accuracy : 0;
-
-    // Track best accuracy always
-    rec.bestAcc = Math.max(rec.bestAcc || 0, acc);
-    rec.lastAcc = acc;
-    rec.lastAt = Date.now();
-
-    // Tier awards only when passing
-    if (passed) {
-        rec.completed = true;
-        rec.completedAt = rec.completedAt || Date.now();
-        const tier = computeChallengeTier(req, acc);
-        rec.lastTier = tier;
-        // Keep best tier (gold > silver > bronze)
-        const order = { bronze: 1, silver: 2, gold: 3 };
-        const cur = rec.tierBest || null;
-        if (!cur || (tier && order[tier] > order[cur])) rec.tierBest = tier;
-    } else {
-        rec.lastTier = null;
-    }
-
-    progress.nodes[nodeId] = rec;
-    saveChallenge(progress);
-}        }
+        }
 
         // Helper: get seat element coords as percentage strings
         function getSeatCoords(heroPos, pos) {
@@ -3691,9 +4590,8 @@ function get4betSize$(heroPos, villainPos){
 function get3betSize$(heroPos, oppPos) {
     const open = getOpenSize$();
     const isIP = postflopIP(heroPos, oppPos);
-    // Live sizing rule (display-only): IP 3x, OOP 4x
-    const mult = isIP ? 3.0 : 4.0;
-    return roundLiveDollars(open * mult);
+    const mult = isIP ? 3.0 : 3.0;
+    return open * mult;
 }
 
 function getSqueezeSize$(heroPos, openerPos, numCallers) {
@@ -3737,8 +4635,7 @@ function renderButtons(hidden) {
         const threeBet$ = get3betSize$(state.currentPos, state.oppPos);
         const isIP = postflopIP(state.currentPos, state.oppPos);
         const threeMain = `3-BET TO ${fmt$(threeBet$)}`;
-        const mult = postflopIP(state.currentPos, state.oppPos) ? 3 : 4;
-        const threeHint = mult === 3 ? `IP 3-bet: ${mult}× open (${fmt$(open$)})` : `OOP 3-bet: ${mult}× open (${fmt$(open$)})`;
+        const threeHint = isIP ? `IP 3-bet: 3× open (${fmt$(open$)})` : `OOP 3-bet: 4× open (${fmt$(open$)})`;
         setSizingHint(threeHint);
         container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
             <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
@@ -4041,45 +4938,8 @@ function renderButtons(hidden) {
             document.getElementById('menu-screen').classList.remove('hidden');
             updateMenuUI();
         }
-        function saveProgress() {
-            try { localStorage.setItem(profileKey('gto_rfi_stats_v2'), JSON.stringify(state.global)); } catch(e) {}
-            SR.save();
-            markCloudDirty();
-        }
-
-        function loadProgress() {
-            const s = localStorage.getItem(profileKey('gto_rfi_stats_v2'));
-            if (s) {
-                try { state.global = JSON.parse(s); } catch(e) {}
-            }
-            if (!state.global) state.global = { totalHands: 0, totalCorrect: 0, bestStreak: 0, byScenario: {}, byPos: {}, byPosGroup: {}, bySpot: {}, byHand: {}, history: [] };
-            if (!state.global.byScenario) state.global.byScenario = {};
-            if (!state.global.byPos) state.global.byPos = {};
-            if (!state.global.byPosGroup) state.global.byPosGroup = {};
-            if (!state.global.bestStreak) state.global.bestStreak = 0;
-            if (!state.global.bySpot) state.global.bySpot = {};
-            if (!state.global.byHand) state.global.byHand = {};
-            if (!Array.isArray(state.global.history)) state.global.history = [];
-
-            // Keep history bounded (prevents mobile storage bloat)
-            if (state.global.history.length > 5000) state.global.history = state.global.history.slice(-5000);
-
-            loadConfig();
-            loadLimperMix();
-            SR.load();
-            updateMenuUI();
-            if (window.RANGE_VALIDATE) {
-                validateAndNormalizeRanges(facingRfiRanges);
-                validateAndNormalizeRanges(rfiVs3BetRanges);
-                validateAndNormalizeRanges(allFacingLimps);
-            }
-        }
-
-        function pushHistoryEvent(ev) {
-            if (!state.global.history) state.global.history = [];
-            state.global.history.push(ev);
-            if (state.global.history.length > 5000) state.global.history = state.global.history.slice(-5000);
-        }
+        function saveProgress() { localStorage.setItem(profileKey('gto_rfi_stats_v2'), JSON.stringify(state.global)); SR.save(); markCloudDirty(); }
+        function loadProgress() { const s = localStorage.getItem(profileKey('gto_rfi_stats_v2')); if (s) state.global = JSON.parse(s); if (!state.global.byScenario) state.global.byScenario = {}; if (!state.global.byPos) state.global.byPos = {}; if (!state.global.byPosGroup) state.global.byPosGroup = {}; if (!state.global.bestStreak) state.global.bestStreak = 0; if (!state.global.bySpot) state.global.bySpot = {}; if (!state.global.byHand) state.global.byHand = {}; loadConfig(); loadLimperMix(); SR.load(); updateMenuUI(); if (window.RANGE_VALIDATE) { validateAndNormalizeRanges(facingRfiRanges); validateAndNormalizeRanges(rfiVs3BetRanges); validateAndNormalizeRanges(allFacingLimps); } }
         function updateUI() { document.getElementById('accuracy').innerText = (state.sessionStats.total ? Math.round(state.sessionStats.correct/state.sessionStats.total*100) : 0) + '%'; document.getElementById('streak').innerText = state.sessionStats.streak; updateDrillCounter(); }
         function updateMenuUI() {
             const allSpots = getAllSpotKeys();
@@ -4611,7 +5471,7 @@ function renderButtons(hidden) {
 
                 function exportTrainerData() {
             try {
-                const baseKeys = ['gto_rfi_stats_v2','gto_sr_v2','gto_config_v2','gto_medals_v1','gto_limper_mix', 'gto_challenge_v1'];
+                const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
                 const profile = getProfileName();
                 const payload = {
                     app: 'PokerCrusher',
@@ -4683,7 +5543,7 @@ function renderButtons(hidden) {
                         } catch(e) {}
                     }
 
-                    const allowed = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix', 'gto_challenge_v1'];
+                    const allowed = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
                     let wrote = 0;
                     allowed.forEach(k => {
                         if (payload.data[k] !== undefined && payload.data[k] !== null) {
@@ -4908,7 +5768,7 @@ function renderButtons(hidden) {
             // Keep identical to exportTrainerData payload shape, but always read/write
             // the *active profile* namespace via profileKey(...) so Cloud sync matches
             // what the trainer actually uses.
-            const baseKeys = ['gto_rfi_stats_v2','gto_sr_v2','gto_config_v2','gto_medals_v1','gto_limper_mix', 'gto_challenge_v1'];
+            const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
             const profile = getProfileName(); // '' means Guest
 
             const payload = {
@@ -4952,7 +5812,7 @@ function renderButtons(hidden) {
             } catch(e) {}
 
             // Write only the known keys into the *active* profile namespace.
-            const allowed = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix', 'gto_challenge_v1'];
+            const allowed = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
             const data = payload.data;
 
             let wrote = 0;
@@ -5164,173 +6024,6 @@ function renderButtons(hidden) {
                 <div class="bg-slate-900 border border-slate-800 rounded-xl p-2.5 flex flex-col items-center">
                     <p class="text-[7px] text-slate-500 uppercase font-bold mb-0.5">Medals</p>
                     <p class="text-base font-black ${totalMedals > 0 ? 'text-yellow-400' : 'text-slate-500'}">${totalMedals}</p>
-                </div>
-            </div>`;
-
-            // === TREND CHART (accuracy by day) ===
-            const hist = Array.isArray(g.history) ? g.history : [];
-            const DAY_MS = 86400000;
-            const DAYS = 21;
-            const now = Date.now();
-            const day0 = new Date(now - (DAYS - 1) * DAY_MS);
-            day0.setHours(0, 0, 0, 0);
-            const startMs = day0.getTime();
-
-            const buckets = Array.from({ length: DAYS }, (_, i) => ({
-                t0: startMs + i * DAY_MS,
-                total: 0,
-                correct: 0
-            }));
-            for (let i = Math.max(0, hist.length - 4000); i < hist.length; i++) {
-                const e = hist[i];
-                const ts = e && typeof e.ts === 'number' ? e.ts : null;
-                if (!ts || ts < startMs) continue;
-                const idx = Math.floor((ts - startMs) / DAY_MS);
-                if (idx < 0 || idx >= DAYS) continue;
-                buckets[idx].total++;
-                if (e.correct) buckets[idx].correct++;
-            }
-            const points = buckets.map(b => b.total ? Math.round(b.correct / b.total * 100) : null);
-            const playedDays = points.filter(v => v != null).length;
-            const last7 = points.slice(-7).filter(v => v != null);
-            const last7Avg = last7.length ? Math.round(last7.reduce((a, b) => a + b, 0) / last7.length) : null;
-
-            function fmtDay(ts) {
-                const d = new Date(ts);
-                return (d.getMonth() + 1) + '/' + d.getDate();
-            }
-
-            function buildTrendSvg() {
-                const W = 320, H = 90, pad = 10;
-                const innerW = W - pad * 2;
-                const innerH = H - pad * 2;
-                const minY = 40, maxY = 100;
-                function y(v) {
-                    const vv = Math.max(minY, Math.min(maxY, v));
-                    const t = (vv - minY) / (maxY - minY);
-                    return pad + innerH - t * innerH;
-                }
-                function x(i) { return pad + (i / (DAYS - 1)) * innerW; }
-
-                // Build path (skip gaps)
-                let dPath = '';
-                let started = false;
-                for (let i = 0; i < points.length; i++) {
-                    const v = points[i];
-                    if (v == null) { started = false; continue; }
-                    const xi = x(i), yi = y(v);
-                    if (!started) {
-                        dPath += `M ${xi.toFixed(1)} ${yi.toFixed(1)} `;
-                        started = true;
-                    } else {
-                        dPath += `L ${xi.toFixed(1)} ${yi.toFixed(1)} `;
-                    }
-                }
-
-                // Dots
-                const dots = points.map((v, i) => {
-                    if (v == null) return '';
-                    const xi = x(i), yi = y(v);
-                    return `<circle cx="${xi.toFixed(1)}" cy="${yi.toFixed(1)}" r="2.2" fill="#818cf8" opacity="0.95" />`;
-                }).join('');
-
-                return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" class="block">
-                    <rect x="0" y="0" width="${W}" height="${H}" rx="14" fill="rgba(2,6,23,0.45)" stroke="rgba(51,65,85,0.6)" />
-                    <line x1="${pad}" y1="${y(80).toFixed(1)}" x2="${W - pad}" y2="${y(80).toFixed(1)}" stroke="rgba(148,163,184,0.12)" />
-                    <line x1="${pad}" y1="${y(60).toFixed(1)}" x2="${W - pad}" y2="${y(60).toFixed(1)}" stroke="rgba(148,163,184,0.10)" />
-                    ${dPath ? `<path d="${dPath}" fill="none" stroke="#818cf8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />` : ''}
-                    ${dots}
-                </svg>`;
-            }
-
-            html += `<div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                <div class="px-5 pt-4 pb-3 border-b border-slate-800/40">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm">📈</span>
-                            <p class="text-xs font-black text-slate-200">Accuracy Trend</p>
-                        </div>
-                        <span class="text-[8px] text-slate-600 font-bold uppercase tracking-wider bg-slate-800/50 px-2 py-0.5 rounded-full">last ${DAYS}d</span>
-                    </div>
-                    <p class="text-[10px] text-slate-500 mt-1 ml-7">${playedDays ? (last7Avg != null ? `Last 7d avg: <span class=\"font-black ${last7Avg >= 80 ? 'text-emerald-400' : last7Avg >= 60 ? 'text-yellow-400' : 'text-rose-400'}\">${last7Avg}%</span>` : 'Keep playing to build a trend line.') : 'No history yet — trends start after you answer hands.'}</p>
-                </div>
-                <div class="p-4">
-                    ${playedDays ? buildTrendSvg() : `<div class="rounded-2xl bg-slate-950/30 border border-dashed border-slate-800 p-6 text-center">
-                        <p class="text-[11px] text-slate-500 font-bold">Play a few hands, then come back</p>
-                        <p class="text-[10px] text-slate-700 mt-1">(trend uses your most recent sessions)</p>
-                    </div>`}
-                    <div class="flex justify-between mt-2 px-1">
-                        <span class="text-[9px] text-slate-600">${fmtDay(startMs)}</span>
-                        <span class="text-[9px] text-slate-600">${fmtDay(startMs + (DAYS - 1) * DAY_MS)}</span>
-                    </div>
-                </div>
-            </div>`;
-
-            // === QUICK EXPLORE: scenario -> worst spots list (tap to open drill-down heatmap) ===
-            const EXP_MIN = 10;
-            const expOptions = ['RFI','FACING_RFI','RFI_VS_3BET','VS_LIMP','SQUEEZE','SQUEEZE_2C'];
-            const expSelected = (window._statsScenarioPick && expOptions.includes(window._statsScenarioPick)) ? window._statsScenarioPick : 'FACING_RFI';
-
-            function buildExploreRows(sc) {
-                const spots = Object.entries(g.bySpot || {})
-                    .filter(([k, v]) => k.startsWith(sc + '|') && v && v.total >= EXP_MIN)
-                    .map(([k, v]) => ({
-                        k,
-                        total: v.total,
-                        correct: v.correct,
-                        acc: v.total ? Math.round(v.correct / v.total * 100) : 0,
-                        label: (() => {
-                            const parts = k.split('|');
-                            return formatSpotLabel(parts[1] || k);
-                        })()
-                    }))
-                    .sort((a, b) => a.acc - b.acc || b.total - a.total)
-                    .slice(0, 10);
-
-                if (!spots.length) {
-                    return `<div class="rounded-xl bg-slate-950/30 border border-dashed border-slate-800 p-4 text-center">
-                        <p class="text-[11px] text-slate-500 font-bold">Not enough data yet</p>
-                        <p class="text-[10px] text-slate-700 mt-1">Play ${EXP_MIN}+ hands in this scenario</p>
-                    </div>`;
-                }
-                return `<div class="flex flex-col">${spots.map((s, i) => {
-                    const color = s.acc >= 80 ? 'text-emerald-400' : s.acc >= 60 ? 'text-yellow-400' : 'text-rose-400';
-                    const bar = s.acc >= 80 ? 'bg-emerald-500' : s.acc >= 60 ? 'bg-yellow-500' : 'bg-rose-500';
-                    return `<div class="flex items-center gap-3 px-2 py-2.5 ${i > 0 ? 'border-t border-slate-800/25' : ''} cursor-pointer hover:bg-slate-800/30" onclick="drilldownSpot('${s.k}')">
-                        <span class="text-[9px] font-black text-slate-700 w-3 text-center shrink-0">${i + 1}</span>
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-center justify-between gap-3">
-                                <span class="text-[11px] font-bold text-slate-200 truncate">${s.label}</span>
-                                <span class="text-[10px] font-black ${color}" style="font-variant-numeric:tabular-nums">${s.acc}%</span>
-                            </div>
-                            <div class="flex items-center gap-2 mt-1">
-                                <div class="flex-1 bg-slate-800/40 rounded-full h-[3px]"><div class="${bar} h-[3px] rounded-full" style="width:${Math.max(3, s.acc)}%"></div></div>
-                                <span class="text-[8px] text-slate-600 shrink-0" style="font-variant-numeric:tabular-nums">${s.correct}/${s.total}</span>
-                            </div>
-                        </div>
-                    </div>`;
-                }).join('')}</div>`;
-            }
-
-            html += `<div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                <div class="px-5 pt-4 pb-3 border-b border-slate-800/40">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-2">
-                            <span class="text-sm">🧭</span>
-                            <p class="text-xs font-black text-slate-200">Explore Weak Spots</p>
-                        </div>
-                        <button onclick="drilldownScenario(window._statsScenarioPick || 'FACING_RFI')" class="text-[10px] font-black text-indigo-300 hover:text-indigo-200">Open full list →</button>
-                    </div>
-                    <p class="text-[10px] text-slate-500 mt-1 ml-7">Tap a row to open your hand heatmap + SR details.</p>
-                </div>
-                <div class="p-4">
-                    <div class="flex items-center gap-2 mb-3">
-                        <select id="stats-scenario-pick" class="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-[11px] font-black text-slate-200 focus:outline-none focus:border-slate-600" onchange="window._statsScenarioPick=this.value; renderUserStats();">
-                            ${expOptions.map(sc => `<option value="${sc}" ${sc === expSelected ? 'selected' : ''}>${SCENARIO_LABELS[sc] || sc}</option>`).join('')}
-                        </select>
-                        <div class="px-3 py-2 rounded-xl bg-slate-950/50 border border-slate-800 text-[10px] font-black text-slate-500">${EXP_MIN}+ reps</div>
-                    </div>
-                    <div class="bg-slate-950/30 rounded-xl overflow-hidden">${buildExploreRows(expSelected)}</div>
                 </div>
             </div>`;
 
