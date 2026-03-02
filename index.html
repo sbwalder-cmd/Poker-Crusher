@@ -5471,7 +5471,7 @@ function renderButtons(hidden) {
 
                 function exportTrainerData() {
             try {
-                const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
+                const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix', 'gto_challenge_v1'];
                 const profile = getProfileName();
                 const payload = {
                     app: 'PokerCrusher',
@@ -5543,7 +5543,7 @@ function renderButtons(hidden) {
                         } catch(e) {}
                     }
 
-                    const allowed = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
+                    const allowed = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix', 'gto_challenge_v1'];
                     let wrote = 0;
                     allowed.forEach(k => {
                         if (payload.data[k] !== undefined && payload.data[k] !== null) {
@@ -5768,7 +5768,7 @@ function renderButtons(hidden) {
             // Keep identical to exportTrainerData payload shape, but always read/write
             // the *active profile* namespace via profileKey(...) so Cloud sync matches
             // what the trainer actually uses.
-            const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
+            const baseKeys = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix', 'gto_challenge_v1'];
             const profile = getProfileName(); // '' means Guest
 
             const payload = {
@@ -5812,7 +5812,7 @@ function renderButtons(hidden) {
             } catch(e) {}
 
             // Write only the known keys into the *active* profile namespace.
-            const allowed = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix'];
+            const allowed = ['gto_rfi_stats_v2', 'gto_sr_v2', 'gto_config_v2', 'gto_medals_v1', 'gto_limper_mix', 'gto_challenge_v1'];
             const data = payload.data;
 
             let wrote = 0;
