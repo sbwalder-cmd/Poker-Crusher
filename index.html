@@ -525,11 +525,11 @@
                 <div id="limper-mix-section" class="hidden">
                     <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 ml-1">Limpers Mix</p>
                     <div class="grid grid-cols-3 gap-2" id="limper-mix-btns">
-                        <button onclick="setLimperMix('mostly1')" id="lmix-mostly1" class="config-btn py-3 rounded-lg text-[10px] font-bold">80/15/5</button>
-                        <button onclick="setLimperMix('liveish')" id="lmix-liveish" class="config-btn py-3 rounded-lg text-[10px] font-bold selected">70/22/8</button>
-                        <button onclick="setLimperMix('multiway')" id="lmix-multiway" class="config-btn py-3 rounded-lg text-[10px] font-bold">55/30/15</button>
+                        <button onclick="setLimperMix('mostly1')" id="lmix-mostly1" class="config-btn py-3 rounded-lg text-[10px] font-bold">Tight</button>
+                        <button onclick="setLimperMix('liveish')" id="lmix-liveish" class="config-btn py-3 rounded-lg text-[10px] font-bold">Live 1/3</button>
+                        <button onclick="setLimperMix('multiway')" id="lmix-multiway" class="config-btn py-3 rounded-lg text-[10px] font-bold selected">Active</button>
                     </div>
-                    <p class="text-[9px] text-slate-600 mt-1.5 ml-1">1 limper / 2 limpers / 3+ limpers</p>
+                    <p class="text-[9px] text-slate-600 mt-1.5 ml-1">Tight: 70/22/8 · Live 1/3: 50/32/18 · Active: 38/40/22</p>
                 </div>
                 <div>
                     <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 ml-1">Hero Position</p>
@@ -1320,11 +1320,11 @@
         // MULTI-LIMP RANGE GENERATION ENGINE
         // ============================================================
         const LIMPER_MIX_PRESETS = {
-            'mostly1': { label: 'Mostly 1 (80/15/5)', weights: { '1L': 0.80, '2L': 0.15, '3P': 0.05 } },
-            'liveish': { label: 'Live-ish (70/22/8)', weights: { '1L': 0.70, '2L': 0.22, '3P': 0.08 } },
-            'multiway': { label: 'Multiway (55/30/15)', weights: { '1L': 0.55, '2L': 0.30, '3P': 0.15 } }
+            'mostly1': { label: 'Tight (70/22/8)', weights: { '1L': 0.70, '2L': 0.22, '3P': 0.08 } },
+            'liveish': { label: 'Live 1/3 (50/32/18)', weights: { '1L': 0.50, '2L': 0.32, '3P': 0.18 } },
+            'multiway': { label: 'Active (38/40/22)', weights: { '1L': 0.38, '2L': 0.40, '3P': 0.22 } }
         };
-        let limperMixPreset = 'liveish';
+        let limperMixPreset = 'multiway'; // default: active limpy room
         function getLimperMixWeights() { return LIMPER_MIX_PRESETS[limperMixPreset].weights; }
         function saveLimperMix() { try { localStorage.setItem(profileKey('gto_limper_mix'), limperMixPreset); } catch(e){} }
         function loadLimperMix() { try { const v = localStorage.getItem(profileKey('gto_limper_mix')); if (v && LIMPER_MIX_PRESETS[v]) limperMixPreset = v; } catch(e){} }
@@ -2005,14 +2005,14 @@
         }
 
         let state = {
-            currentHand: null, currentPos: '', oppPos: '', scenario: 'RFI',
+            currentHand: null, currentPos: '', oppPos: '', scenario: 'RFI', villainOpenSize: 15,
             squeezeOpener: '', squeezeCaller: '', squeezeCaller2: '',
             limperBucket: '1L', limperPositions: [],
             sessionStats: { total: 0, correct: 0, streak: 0 },
             sessionLog: [], // array of hand records for this session
             recentHandKeys: [], // variety guard: last N hand keys for anti-repeat
             global: { totalHands: 0, totalCorrect: 0, bestStreak: 0, byScenario: {}, byPos: {}, byPosGroup: {}, bySpot: {}, byHand: {} },
-            config: { scenarios: ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C'], positions: [...ALL_POSITIONS] },
+            config: { scenarios: ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C'], positions: [...ALL_POSITIONS], openSize: 15 },
             libCategory: 'RFI'
         };
 
@@ -3068,6 +3068,17 @@ function retryChallenge() {
         function saveConfig() {
             localStorage.setItem(profileKey('gto_config_v2'), JSON.stringify(state.config));
         }
+        function setOpenSize(size) {
+            state.config.openSize = size;
+            saveConfig();
+            updateOpenSizeUI();
+        }
+        function updateOpenSizeUI() {
+            [12, 15, 20].forEach(s => {
+                const btn = document.getElementById(`osize-${s}`);
+                if (btn) btn.className = `config-btn py-3 rounded-lg text-[10px] font-bold ${s === state.config.openSize ? 'selected' : ''}`;
+            });
+        }
         function loadConfig() {
             try {
                 const s = localStorage.getItem(profileKey('gto_config_v2'));
@@ -3081,6 +3092,9 @@ function retryChallenge() {
                     if (c.positions && Array.isArray(c.positions)) {
                         state.config.positions = c.positions.filter(p => ALL_POSITIONS.includes(p));
                         if (state.config.positions.length === 0) state.config.positions = [...ALL_POSITIONS];
+                    }
+                    if (c.openSize && [12, 15, 20].includes(c.openSize)) {
+                        state.config.openSize = c.openSize;
                     }
                 }
             } catch(e) {}
@@ -3117,6 +3131,7 @@ function retryChallenge() {
                 btn.className = `config-btn py-3 rounded-lg text-xs font-black ${isSel ? 'selected' : ''}`;
             });
             updateLimperMixUI();
+            updateOpenSizeUI();
         }
 
         function updateDrillCounter() {
@@ -3513,6 +3528,7 @@ function retryChallenge() {
                 if (state.scenario === 'RFI') {
                     state.currentPos = parts[1];
                     state.oppPos = '';
+                    state.villainOpenSize = 15; // RFI: hero opens, no villain open
                 } else if (state.scenario === 'VS_LIMP') {
                     const m = parts[1].match(/(.+)_vs_(.+)_Limp/);
                     state.currentPos = m ? m[1] : 'BTN';
@@ -3553,6 +3569,8 @@ function retryChallenge() {
                 } else {
                     const [p, o] = parts[1].split('_vs_');
                     state.currentPos = p; state.oppPos = o;
+                    // FACING_RFI: villain opened with a random size; RFI_VS_3BET: hero opened
+                    state.villainOpenSize = (state.scenario === 'FACING_RFI') ? pickVillainOpenSize() : getOpenSize$();
                 }
             } else {
                 // Normal training: random scenario/spot respecting config
@@ -3648,10 +3666,12 @@ function retryChallenge() {
                     const pairs = Object.keys(facingRfiRanges).filter(p => state.config.positions.includes(p.split('_vs_')[0]));
                     const key = pairs[Math.floor(Math.random() * pairs.length)];
                     [state.currentPos, state.oppPos] = key.split('_vs_');
+                    state.villainOpenSize = pickVillainOpenSize();
                 } else if (state.scenario === 'RFI_VS_3BET' || state.scenario === 'RFI_VS_3') {
                     const pairs = Object.keys(rfiVs3BetRanges).filter(p => state.config.positions.includes(p.split('_vs_')[0]));
                     const key = pairs[Math.floor(Math.random() * pairs.length)];
                     [state.currentPos, state.oppPos] = key.split('_vs_');
+                    state.villainOpenSize = getOpenSize$(); // hero opened; villain 3-bet sizes off hero's open
                 } else if (state.scenario === 'VS_LIMP') {
                     // Filter limp keys to enabled hero positions
                     const limpKeys = Object.keys(allFacingLimps).filter(k => {
@@ -3693,6 +3713,7 @@ function retryChallenge() {
                     state.squeezeOpener = p.opener;
                     state.squeezeCaller = p.caller;
                     state.oppPos = key; // full key for data lookup
+                    state.villainOpenSize = pickVillainOpenSize();
                 } else if (state.scenario === 'SQUEEZE_2C') {
                     const sqKeys = Object.keys(squeezeVsRfiTwoCallers).filter(k => {
                         const p = parseSqueeze2CKey(k);
@@ -3705,6 +3726,7 @@ function retryChallenge() {
                     state.squeezeCaller = p.caller1;
                     state.squeezeCaller2 = p.caller2;
                     state.oppPos = key;
+                    state.villainOpenSize = pickVillainOpenSize();
                 } else {
                     const pairs = Object.keys(rfiVs3BetRanges).filter(p => state.config.positions.includes(p.split('_vs_')[0]));
                     const key = pairs[Math.floor(Math.random() * pairs.length)];
@@ -3717,7 +3739,7 @@ function retryChallenge() {
             if (state.scenario === 'RFI') {
                 document.getElementById('scenario-hint').innerText = "Folded to you...";
             } else if (state.scenario === 'FACING_RFI') {
-                document.getElementById('scenario-hint').innerText = `${POS_LABELS[state.oppPos]} raises to ${fmt$(getOpenSize$())}...`;
+                document.getElementById('scenario-hint').innerText = `${POS_LABELS[state.oppPos]} raises to ${fmt$(getVillainOpenSize$())}...`;
             } else if (state.scenario === 'VS_LIMP') {
                 if (state.limperBucket === '3P') {
                     document.getElementById('scenario-hint').innerText = `3+ limp pot, you're on ${POS_LABELS[state.currentPos]}...`;
@@ -3733,7 +3755,7 @@ function retryChallenge() {
             } else if (state.scenario === 'SQUEEZE_2C') {
                 document.getElementById('scenario-hint').innerText = `${POS_LABELS[state.squeezeOpener]} opens, ${POS_LABELS[state.squeezeCaller]} and ${POS_LABELS[state.squeezeCaller2]} call...`;
             } else {
-                document.getElementById('scenario-hint').innerText = `You raised, ${POS_LABELS[state.oppPos]} 3-bets to ${bbTo$(15)}...`;
+                document.getElementById('scenario-hint').innerText = `You raised, ${POS_LABELS[state.oppPos]} 3-bets to ${fmt$(get3betSize$(state.oppPos, state.currentPos))}...`;
             }
 
             // Sample hand using EdgeWeight (edge-case focus), or use review override
@@ -4144,8 +4166,8 @@ function handleInput(action) {
                 if (pos === 'SB') betAmount = 0.5;
                 if (pos === 'BB') betAmount = 1;
 
-                // Facing RFI: opponent opened
-                if (state.scenario === 'FACING_RFI' && pos === oppPos) betAmount = openBB;
+                // Facing RFI: opponent opened with their random size
+                if (state.scenario === 'FACING_RFI' && pos === oppPos) betAmount = getVillainOpenSize$() / BB_DOLLARS;
 
                 // Hero opened, facing 3-bet
                 if ((state.scenario === 'RFI_VS_3BET' || state.scenario === 'RFI_VS_3') ) {
@@ -4302,7 +4324,7 @@ function handleInput(action) {
                     // Raiser raises
                     const oppCoords = getSeatCoords(heroPos, oppPos);
                     animateChip(betsLayer, oppCoords, 5);
-                    showActionBadge(document.getElementById(`seat-${oppPos}`), 'RAISE ' + fmt$(getOpenSize$()), 'badge-raise', 700);
+                    showActionBadge(document.getElementById(`seat-${oppPos}`), 'RAISE ' + fmt$(getVillainOpenSize$()), 'badge-raise', 700);
                     await delay(300);
                     // Fold positions between raiser and hero
                     for (let k = oppActionIdx + 1; k < 8; k++) {
@@ -4432,7 +4454,7 @@ function handleInput(action) {
                     }
                     const openerCoords = getSeatCoords(heroPos, opener);
                     animateChip(betsLayer, openerCoords, 5);
-                    showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + fmt$(getOpenSize$()), 'badge-raise', 700);
+                    showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + fmt$(getVillainOpenSize$()), 'badge-raise', 700);
                     await delay(300);
                     for (let k = openerIdx + 1; k < callerIdx; k++) {
                         const foldPos = actionOrder[k];
@@ -4483,7 +4505,7 @@ function handleInput(action) {
                     }
                     // Opener raises
                     animateChip(betsLayer, getSeatCoords(heroPos, opener), 5);
-                    showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + fmt$(getOpenSize$()), 'badge-raise', 700);
+                    showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + fmt$(getVillainOpenSize$()), 'badge-raise', 700);
                     await delay(300);
                     // Fold between opener and caller1
                     for (let k = openerIdx + 1; k < c1Idx; k++) {
@@ -4679,7 +4701,7 @@ function computeHeroBetDollarsForAction(action){
     if (state.scenario === 'RFI' && action === 'RAISE') return open$;
 
     // Facing RFI tree
-    if (state.scenario === 'FACING_RFI' && action === '3BET') return get3betSize$(state.currentPos, state.oppPos);
+    if (state.scenario === 'FACING_RFI' && action === '3BET') return get3betSize$(state.currentPos, state.oppPos, getVillainOpenSize$());
 
     // Vs limpers
     if (state.scenario === 'VS_LIMP' && action === 'RAISE') {
@@ -4706,8 +4728,19 @@ function postflopIP(heroPos, oppPos) {
     return ORDER.indexOf(heroPos) > ORDER.indexOf(oppPos);
 }
 
-function getOpenSize$() { return 15; } // live default open
+function getOpenSize$() { return (state && state.config && state.config.openSize) ? state.config.openSize : 15; } // reads from config
 function getOpenSizeBB() { return getOpenSize$() / BB_DOLLARS; } // = 5bb
+
+// Villain open size: randomized per-hand from a realistic 1/3 pool.
+// Pool weighted toward $15 (most common), but includes the full range you'll face.
+// 1/3 live open distribution: $6 min-raise (rare), $10-12 tight, $15 standard (most common), $17-18 occasional, $20 splashy (uncommon), $25 very rare
+const VILLAIN_OPEN_POOL = [6, 10, 12, 12, 15, 15, 15, 15, 15, 15, 17, 18, 20, 25];
+function pickVillainOpenSize() {
+    return VILLAIN_OPEN_POOL[Math.floor(Math.random() * VILLAIN_OPEN_POOL.length)];
+}
+function getVillainOpenSize$() {
+    return (state && state.villainOpenSize) ? state.villainOpenSize : 15;
+}
 
 function getIsoSize$(numLimpers) {
     // Iso = 5bb + 1bb per limper
@@ -4723,15 +4756,15 @@ function get4betSize$(heroPos, villainPos){
     const mult = heroIP ? 2.2 : 2.5;
     return roundLiveDollars(threeBet$ * mult);
 }
-function get3betSize$(heroPos, oppPos) {
-    const open = getOpenSize$();
+function get3betSize$(heroPos, oppPos, openOverride) {
+    const open = openOverride !== undefined ? openOverride : getOpenSize$();
     const isIP = postflopIP(heroPos, oppPos);
-    const mult = isIP ? 3.0 : 4.0; // IP: 3× open ($45), OOP: 4× open ($60) for live 1/3
+    const mult = isIP ? 3.0 : 4.0; // IP: 3× open, OOP: 4× open
     return open * mult;
 }
 
-function getSqueezeSize$(heroPos, openerPos, numCallers) {
-    const open = getOpenSize$();
+function getSqueezeSize$(heroPos, openerPos, numCallers, openOverride) {
+    const open = openOverride !== undefined ? openOverride : getOpenSize$();
     const isIP = postflopIP(heroPos, openerPos);
     const base = isIP ? 3.5 : 4.5;
     const callers = numCallers || 0;
@@ -4768,10 +4801,11 @@ function renderButtons(hidden) {
             <button onclick="handleInput('RAISE')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">${raiseMain}</button>
         </div>`;
     } else if (state.scenario === 'FACING_RFI') {
-        const threeBet$ = get3betSize$(state.currentPos, state.oppPos);
+        const villainOpen$ = getVillainOpenSize$();
+        const threeBet$ = get3betSize$(state.currentPos, state.oppPos, villainOpen$);
         const isIP = postflopIP(state.currentPos, state.oppPos);
         const threeMain = `3-BET TO ${fmt$(threeBet$)}`;
-        const threeHint = isIP ? `IP 3-bet: 3× open (${fmt$(open$)})` : `OOP 3-bet: 4× open (${fmt$(open$)})`;
+        const threeHint = isIP ? `IP 3-bet: 3× open (${fmt$(villainOpen$)})` : `OOP 3-bet: 4× open (${fmt$(villainOpen$)})`;
         setSizingHint(threeHint);
         container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
             <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
@@ -4799,10 +4833,11 @@ function renderButtons(hidden) {
     } else if (state.scenario === 'SQUEEZE' || state.scenario === 'SQUEEZE_2C') {
         const callers = (state.scenario === 'SQUEEZE_2C') ? 2 : 1;
         const opener = state.squeezeOpener || state.oppPos; // opener seat if tracked
-        const squeeze$ = getSqueezeSize$(state.currentPos, opener, callers);
+        const villainOpen$ = getVillainOpenSize$();
+        const squeeze$ = getSqueezeSize$(state.currentPos, opener, callers, villainOpen$);
         const isIP = postflopIP(state.currentPos, opener);
         const main = `SQUEEZE TO ${fmt$(squeeze$)}`;
-        const hint = isIP ? `IP squeeze: 3.5× + 1×/caller (${callers} caller${callers===1?'':'s'})` : `OOP squeeze: 4.5× + 1×/caller (${callers} caller${callers===1?'':'s'})`;
+        const hint = isIP ? `IP squeeze: 3.5× + 1×/caller off ${fmt$(villainOpen$)} open` : `OOP squeeze: 4.5× + 1×/caller off ${fmt$(villainOpen$)} open`;
         setSizingHint(hint);
 
         container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
@@ -5656,7 +5691,7 @@ function _renderChart(pos, target, scenario, oppPos) {
             };
         })();
 
-        window.onload = function(){ loadProgress(); try{ updateMenuUI(); }catch(e){} startCloudAutosaveLoop(false); };
+        window.onload = function(){ loadProgress(); try{ updateMenuUI(); }catch(e){} try{ updateOpenSizeUI(); }catch(e){} startCloudAutosaveLoop(false); };
         function showUserStats() {
             renderUserStats();
             document.getElementById('stats-screen').classList.remove('hidden');
