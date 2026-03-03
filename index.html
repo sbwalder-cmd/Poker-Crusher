@@ -376,6 +376,10 @@
                 TRAIN NOW
             </button>
 
+            <button onclick="showDailyRunMenu()" class="w-full py-4 bg-indigo-700/90 hover:bg-indigo-600 active:scale-[0.98] rounded-2xl font-black text-base transition-all shadow-lg flex items-center justify-center gap-2">
+                <span>🔥</span><span>DAILY RUN</span>
+            </button>
+
             <button onclick="showChallengeMenu()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] rounded-2xl font-black text-base transition-all shadow-lg flex items-center justify-center gap-2">
                 <span>🏆</span><span>CHALLENGE MODE</span>
             </button>
@@ -500,7 +504,58 @@
         </div>
     </div>
 
-    <!-- CONFIGURATION SCREEN -->
+    
+    <!-- DAILY RUN SCREEN -->
+    <div id="daily-run-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl flex flex-col items-center justify-start overflow-y-auto z-40">
+        <div class="w-full max-w-md p-6 flex flex-col gap-5">
+            <div class="flex items-center justify-between">
+                <button onclick="showMenu()" class="px-4 py-2 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-xl font-bold text-slate-300 text-sm">← Back</button>
+                <div class="text-right">
+                    <div class="text-slate-200 font-black text-lg">Daily Run</div>
+                    <div id="daily-run-subtitle" class="text-slate-400 text-xs font-semibold">Up to 3 runs per day</div>
+                </div>
+            </div>
+
+            <div id="daily-run-status" class="w-full bg-slate-900/40 backdrop-blur-md border border-slate-700/50 rounded-3xl p-5 shadow-2xl">
+                <!-- Injected by updateDailyRunUI -->
+            </div>
+
+            <div class="grid grid-cols-1 gap-3">
+                <button onclick="startDailyRun('easy')" id="daily-run-btn-easy" class="w-full py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-between px-5">
+                    <span class="flex items-center gap-3"><span class="text-lg">🟢</span><span>Warm‑Up</span></span>
+                    <span class="text-slate-400 text-sm font-bold">Easy spots</span>
+                </button>
+                <button onclick="startDailyRun('medium')" id="daily-run-btn-medium" class="w-full py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-between px-5">
+                    <span class="flex items-center gap-3"><span class="text-lg">🟡</span><span>Grind</span></span>
+                    <span class="text-slate-400 text-sm font-bold">Mixed spots</span>
+                </button>
+                <button onclick="startDailyRun('hard')" id="daily-run-btn-hard" class="w-full py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-between px-5">
+                    <span class="flex items-center gap-3"><span class="text-lg">🔴</span><span>Boss</span></span>
+                    <span class="text-slate-400 text-sm font-bold">Hard spots</span>
+                </button>
+            </div>
+
+            <div class="text-slate-500 text-xs leading-relaxed">
+                Finish the run to keep your streak. You'll get a summary: score, accuracy, and your biggest leak spot from today.
+            </div>
+        </div>
+    </div>
+
+    <!-- DAILY RUN COMPLETE MODAL -->
+    <div id="daily-run-complete-screen" class="hidden fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-50 p-6">
+        <div class="w-full max-w-md bg-slate-900/50 border border-slate-700/50 rounded-3xl p-6 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <div class="text-slate-100 font-black text-xl">Daily Run Complete</div>
+                <div id="daily-run-complete-badge" class="text-xs font-black px-3 py-1 rounded-full bg-indigo-600/30 text-indigo-200 border border-indigo-500/30">DONE</div>
+            </div>
+            <div id="daily-run-complete-body" class="mt-4"></div>
+            <div class="mt-5 flex flex-col gap-3">
+                <button onclick="endDailyRunToMenu()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-2xl font-black text-base transition-all shadow-lg">Main Menu</button>
+            </div>
+        </div>
+    </div>
+
+<!-- CONFIGURATION SCREEN -->
     <div id="config-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-start overflow-y-auto">
         <div class="w-full max-w-sm flex flex-col gap-6 pt-6 pb-12">
             <!-- Mode Tabs -->
@@ -2811,6 +2866,421 @@
             lockedLimperBucket: null  // set by challenge nodes to lock a specific bucket
         };
 
+        // --- DAILY RUN (once per 24 hours) ---
+        const DAILY_RUN_KEY = 'pc_dailyRun_v1';
+        let dailyRunState = {
+            active: false,
+            option: null,           // 'easy' | 'medium' | 'hard'
+            startedAt: 0,
+            total: 0,               // attempts in this run
+            correct: 0,             // correct answers in this run
+            runStreak: 0,           // correct-in-a-row (score)
+            ended: false,           // set true on first miss
+            shownComplete: false,   // prevent double-modal
+            bySpot: {}              // per-spot attempts in this run (for leak)
+        };
+
+        function loadDailyRunMeta() {
+            const defaults = {
+                // Day-based streak: count of consecutive days with ≥1 completed run
+                streak: 0,
+                bestStreak: 0,
+                lastDayIndex: null,
+
+                // Per-day cap (3 runs/day)
+                runsDayIndex: null,
+                runsToday: 0,
+
+                // Lifetime
+                totalRuns: 0,
+                bestRun: 0,
+                bestRunEasy: 0,
+                bestRunMedium: 0,
+                bestRunHard: 0,
+
+                // Last run details
+                lastCompletedAt: 0,
+                lastOption: null,
+                lastRun: 0,
+                lastTotal: 0,
+                lastCorrect: 0,
+                lastLeakKey: null,
+
+                // Rolling history (last ~60 days)
+                history: []
+            };
+            try {
+                const raw = localStorage.getItem(DAILY_RUN_KEY);
+                if (!raw) return { ...defaults };
+                const parsed = JSON.parse(raw);
+                const merged = { ...defaults, ...(parsed || {}) };
+                // Normalize types defensively
+                merged.lastCompletedAt = Number(merged.lastCompletedAt || 0);
+                merged.streak = Number(merged.streak || 0);
+                merged.bestStreak = Number(merged.bestStreak || 0);
+
+                merged.runsToday = Number(merged.runsToday || 0);
+                if (merged.runsDayIndex !== null && merged.runsDayIndex !== undefined) merged.runsDayIndex = Number(merged.runsDayIndex);
+                if (merged.runsDayIndex !== merged.runsDayIndex) merged.runsDayIndex = null;
+
+                merged.totalRuns = Number(merged.totalRuns || 0);
+                merged.bestRun = Number(merged.bestRun || 0);
+                merged.bestRunEasy = Number(merged.bestRunEasy || 0);
+                merged.bestRunMedium = Number(merged.bestRunMedium || 0);
+                merged.bestRunHard = Number(merged.bestRunHard || 0);
+
+                merged.lastRun = Number(merged.lastRun || 0);
+                merged.lastTotal = Number(merged.lastTotal || 0);
+                merged.lastCorrect = Number(merged.lastCorrect || 0);
+
+                if (merged.lastDayIndex !== null && merged.lastDayIndex !== undefined) merged.lastDayIndex = Number(merged.lastDayIndex);
+                if (merged.lastDayIndex !== merged.lastDayIndex) merged.lastDayIndex = null;
+
+                if (!Array.isArray(merged.history)) merged.history = [];
+                // clamp history size
+                if (merged.history.length > 120) merged.history = merged.history.slice(-120);
+                return merged;
+            } catch (_) {
+                return { ...defaults };
+            }
+        }
+
+        function saveDailyRunMeta(meta) {
+            try { localStorage.setItem(DAILY_RUN_KEY, JSON.stringify(meta)); } catch (_) {}
+        }
+
+        function getLocalDayIndex(ts) {
+            const d = new Date(ts);
+            d.setHours(0,0,0,0);
+            return Math.floor(d.getTime() / 86400000);
+        }
+
+        function getDailyRunLockInfo() {
+            const meta = loadDailyRunMeta();
+            const now = Date.now();
+            const today = getLocalDayIndex(now);
+
+            // reset daily counter if we've moved to a new local day
+            if (meta.runsDayIndex === null || meta.runsDayIndex === undefined || meta.runsDayIndex !== today) {
+                meta.runsDayIndex = today;
+                meta.runsToday = 0;
+                saveDailyRunMeta(meta);
+            }
+
+            const locked = Number(meta.runsToday || 0) >= 3;
+
+            // ms left until next local midnight
+            let msLeft = 0;
+            if (locked) {
+                const d = new Date(now);
+                d.setHours(24,0,0,0); // next midnight
+                msLeft = Math.max(0, d.getTime() - now);
+            }
+            return { meta, locked, msLeft };
+        }
+
+        function formatDuration(ms) {
+            const s = Math.max(0, Math.floor(ms / 1000));
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            const ss = s % 60;
+            const pad = n => String(n).padStart(2,'0');
+            return `${h}:${pad(m)}:${pad(ss)}`;
+        }
+
+        function hideAllScreens() {
+            const ids = [
+                'menu-screen','config-screen','trainer-screen','stats-screen','settings-screen',
+                'challenge-screen','library-screen','daily-run-screen'
+            ];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+            // Hide modals if present
+            const modals = ['chart-modal','drill-complete-screen','daily-run-complete-screen'];
+            modals.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+        }
+
+        
+        // Show main menu (alias used by several screens)
+        function showMenu() {
+            hideAllScreens();
+            const menu = document.getElementById('menu-screen');
+            if (menu) menu.classList.remove('hidden');
+            try { updateMenuUI(); } catch(_) {}
+        }
+
+function showDailyRunMenu() {
+            hideAllScreens();
+            document.getElementById('daily-run-screen').classList.remove('hidden');
+            updateDailyRunUI();
+        }
+
+        function updateDailyRunUI() {
+            const { meta, locked, msLeft } = getDailyRunLockInfo();
+
+            const streakDays = Number(meta.streak || 0);
+            const runs = Number(meta.totalRuns || 0);
+            const runsToday = Number(meta.runsToday || 0);
+            const bestRun = Number(meta.bestRun || 0);
+
+            const lastRun = Number(meta.lastRun || 0);
+            const lastTotal = Number(meta.lastTotal || 0);
+            const lastCorrect = Number(meta.lastCorrect || 0);
+            const lastOpt = meta.lastOption || null;
+            const lastWhen = meta.lastCompletedAt ? new Date(meta.lastCompletedAt) : null;
+            const lastLeak = meta.lastLeakKey ? prettySpotName(meta.lastLeakKey) : null;
+
+            const lastOptName = lastOpt === 'easy' ? 'Warm‑Up' : lastOpt === 'hard' ? 'Boss' : lastOpt === 'medium' ? 'Grind' : null;
+
+            const subtitle = document.getElementById('daily-run-subtitle');
+            if (subtitle) subtitle.textContent = `3 runs per day · Score = correct in a row`;
+
+            const statusEl = document.getElementById('daily-run-status');
+            if (statusEl) {
+                const lockLine = locked
+                    ? `<div class="text-amber-300 font-black">Daily cap reached (3/3)</div><div class="text-slate-400 text-xs font-semibold mt-1">Resets in ${formatDuration(msLeft)}</div>`
+                    : `<div class="text-emerald-300 font-black">${runsToday}/3 used today</div><div class="text-slate-400 text-xs font-semibold mt-1">Pick a difficulty and go until you miss.</div>`;
+                statusEl.innerHTML = `
+                    <div class="flex items-start justify-between gap-4">
+                        <div>${lockLine}</div>
+                        <div class="text-right">
+                            <div class="text-slate-300 text-xs font-bold uppercase tracking-widest">Day streak</div>
+                            <div class="text-slate-100 font-black text-2xl">${streakDays}</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 grid grid-cols-3 gap-3">
+                        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3 text-center">
+                            <div class="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Runs</div>
+                            <div class="text-slate-100 font-black text-xl mt-1">${runs}</div>
+                        </div>
+                        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3 text-center">
+                            <div class="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Best run</div>
+                            <div class="text-slate-100 font-black text-xl mt-1">${bestRun}</div>
+                        </div>
+                        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3 text-center">
+                            <div class="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Today left</div>
+                            <div class="text-slate-100 font-black text-xl mt-1">${Math.max(0, 3 - runsToday)}</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 bg-slate-950/40 border border-slate-800 rounded-2xl p-4">
+                        <div class="text-slate-400 text-xs font-bold uppercase tracking-widest">Last run</div>
+                        <div class="text-slate-100 font-black text-lg mt-1">${lastOptName ? `${lastRun} · ${lastOptName}` : '—'}</div>
+                        <div class="text-slate-500 text-xs mt-1">${lastWhen ? lastWhen.toLocaleString() : ''}</div>
+                        <div class="text-slate-400 text-xs mt-2">${lastOptName ? `Accuracy: ${lastCorrect}/${lastTotal}` : ''}</div>
+                        <div class="text-slate-400 text-xs mt-1">${lastLeak ? `Leak: ${lastLeak}` : ''}</div>
+                    </div>
+                `;
+            }
+
+            // Disable buttons when locked
+            ['easy','medium','hard'].forEach(opt => {
+                const btn = document.getElementById(`daily-run-btn-${opt}`);
+                if (!btn) return;
+                if (locked) {
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50','pointer-events-none');
+                } else {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50','pointer-events-none');
+                }
+            });
+        }
+
+        function startDailyRun(option) {
+            const { locked } = getDailyRunLockInfo();
+            if (locked) { updateDailyRunUI(); return; }
+
+            dailyRunState.active = true;
+            dailyRunState.option = option; // easy|medium|hard
+            dailyRunState.startedAt = Date.now();
+            dailyRunState.total = 0;
+            dailyRunState.correct = 0;
+            dailyRunState.runStreak = 0;
+            dailyRunState.ended = false;
+            dailyRunState.shownComplete = false;
+            dailyRunState.bySpot = {};
+            dailyRunState._rerollGuard = 0;
+
+            // Start trainer session using user's current config (no UI/layout special-casing)
+            state.sessionStats = { total: 0, correct: 0, streak: 0 };
+            state.sessionLog = [];
+
+            hideAllScreens();
+            document.getElementById('trainer-screen').classList.remove('hidden');
+
+            updateUI();
+            try { updateDrillCounter(); } catch(_) {}
+            safeGenerateNextRound();
+        }
+
+
+
+        function dailyRunAllowsScenario(scenario) {
+            const opt = dailyRunState ? dailyRunState.option : null;
+            if (!opt) return true;
+            if (opt === 'easy') {
+                return scenario === 'RFI' || scenario === 'FACING_RFI';
+            }
+            if (opt === 'medium') {
+                return scenario === 'RFI' || scenario === 'FACING_RFI' || scenario === 'VS_LIMP' || scenario === 'RFI_VS_3BET';
+            }
+            // hard
+            return scenario === 'SQUEEZE' || scenario === 'SQUEEZE_2C' || scenario === 'RFI_VS_3BET' || scenario === 'VS_LIMP' || scenario === 'FACING_RFI' || scenario === 'RFI';
+        }
+
+        function dailyRunSpotAllowedNow() {
+            if (!dailyRunState || !dailyRunState.active) return true;
+            return dailyRunAllowsScenario(state.scenario);
+        }
+function checkDailyRunComplete() {
+            if (!dailyRunState || !dailyRunState.active) return false;
+            if (dailyRunState.ended && !dailyRunState.shownComplete) {
+                dailyRunState.shownComplete = true;
+                showDailyRunComplete();
+                return true;
+            }
+            return dailyRunState.ended === true;
+        }
+
+        function showDailyRunComplete() {
+            const total = dailyRunState.total || 0;
+            const correct = dailyRunState.correct || 0;
+            const runScore = dailyRunState.runStreak || 0;
+            const accuracy = total ? Math.round((correct / total) * 100) : 0;
+
+            // Biggest leak = lowest accuracy spot (min 2 attempts), else most misses
+            let leakKey = null;
+            let leakScore = Infinity;
+            let leakMisses = -1;
+
+            Object.entries(dailyRunState.bySpot || {}).forEach(([k, v]) => {
+                const t = v.total || 0;
+                const c = v.correct || 0;
+                const miss = t - c;
+                const acc = t ? (c / t) : 0;
+                if (t >= 2) {
+                    if (acc < leakScore) { leakScore = acc; leakKey = k; }
+                } else {
+                    if (miss > leakMisses) { leakMisses = miss; leakKey = leakKey || k; }
+                }
+            });
+
+            const leakLabel = leakKey ? prettySpotName(leakKey) : '—';
+
+            // Update meta: 3/day cap + day streak + lifetime stats + history
+            const now = Date.now();
+            const meta = loadDailyRunMeta();
+            const today = getLocalDayIndex(now);
+            const lastDay = (meta.lastDayIndex === null || meta.lastDayIndex === undefined) ? null : meta.lastDayIndex;
+
+            // ensure today's counter is initialized
+            if (meta.runsDayIndex === null || meta.runsDayIndex === undefined || meta.runsDayIndex !== today) {
+                meta.runsDayIndex = today;
+                meta.runsToday = 0;
+            }
+
+            // day-streak increments only on the first completed run of a new day
+            let newDayStreak = Number(meta.streak || 0);
+            if (meta.runsToday === 0) {
+                if (lastDay === null) newDayStreak = 1;
+                else if (today === lastDay) newDayStreak = Math.max(1, newDayStreak);
+                else if (today === lastDay + 1) newDayStreak = newDayStreak + 1;
+                else newDayStreak = 1;
+                meta.lastDayIndex = today;
+                meta.streak = newDayStreak;
+                meta.bestStreak = Math.max(Number(meta.bestStreak || 0), newDayStreak);
+            }
+
+            meta.runsToday = Number(meta.runsToday || 0) + 1;
+
+            meta.lastCompletedAt = now;
+            meta.lastOption = dailyRunState.option;
+
+            meta.totalRuns = Number(meta.totalRuns || 0) + 1;
+
+            meta.lastRun = runScore;
+            meta.lastTotal = total;
+            meta.lastCorrect = correct;
+            meta.lastLeakKey = leakKey || null;
+
+            meta.bestRun = Math.max(Number(meta.bestRun || 0), runScore);
+            if (dailyRunState.option === 'easy') meta.bestRunEasy = Math.max(Number(meta.bestRunEasy || 0), runScore);
+            if (dailyRunState.option === 'medium') meta.bestRunMedium = Math.max(Number(meta.bestRunMedium || 0), runScore);
+            if (dailyRunState.option === 'hard') meta.bestRunHard = Math.max(Number(meta.bestRunHard || 0), runScore);
+
+            // append history entry (cap ~120)
+            const hist = Array.isArray(meta.history) ? meta.history.slice() : [];
+            hist.push({ dayIndex: today, at: now, option: dailyRunState.option, run: runScore, total: total, correct: correct, leakKey: leakKey || null });
+            while (hist.length > 120) hist.shift();
+            meta.history = hist;
+
+            saveDailyRunMeta(meta);
+
+            // Render modal
+            const optName = dailyRunState.option === 'easy' ? 'Warm‑Up' : dailyRunState.option === 'hard' ? 'Boss' : 'Grind';
+            const body = `
+                <div class="mt-2 grid grid-cols-2 gap-3">
+                    <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-4">
+                        <div class="text-slate-400 text-xs font-bold uppercase tracking-widest">Run (Correct in a row)</div>
+                        <div class="text-slate-100 font-black text-3xl mt-1">${runScore}</div>
+                        <div class="text-slate-500 text-xs mt-1">${optName}</div>
+                    </div>
+                    <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-4">
+                        <div class="text-slate-400 text-xs font-bold uppercase tracking-widest">Accuracy</div>
+                        <div class="text-slate-100 font-black text-3xl mt-1">${accuracy}%</div>
+                        <div class="text-slate-500 text-xs mt-1">${correct}/${total}</div>
+                    </div>
+                </div>
+                <div class="mt-3 bg-slate-950/40 border border-slate-800 rounded-2xl p-4">
+                    <div class="text-slate-400 text-xs font-bold uppercase tracking-widest">Biggest leak</div>
+                    <div class="text-slate-100 font-black text-lg mt-1">${leakLabel}</div>
+                </div>
+                <div class="mt-3 text-slate-400 text-xs">
+                    Runs today: <span class="text-slate-200 font-bold">${meta.runsToday}/3</span> · Day streak: <span class="text-slate-200 font-bold">${meta.streak}</span>
+                </div>
+            `;
+
+            const modal = document.getElementById('daily-run-complete-screen');
+            if (modal) {
+                const titleEl = modal.querySelector('#daily-run-complete-title');
+                const bodyEl = modal.querySelector('#daily-run-complete-body');
+                if (titleEl) titleEl.textContent = 'Daily Run Complete';
+                if (bodyEl) bodyEl.innerHTML = body;
+                modal.classList.remove('hidden');
+            }
+
+            // mark run as finished
+            dailyRunState.active = false;
+        }
+
+        function endDailyRunToMenu() {
+            document.getElementById('daily-run-complete-screen').classList.add('hidden');
+            showMenu();
+        }
+
+        function prettySpotName(spotKey) {
+            // spotKey formats: "RFI|BTN" or "FACING_RFI|BTN_vs_CO" or "VS_LIMP|SB_vs_UTG_Limp|1" etc.
+            // Keep it short but readable.
+            try {
+                const parts = String(spotKey).split('|');
+                const sc = parts[0] || '';
+                let rest = parts[1] || '';
+                if (sc === 'VS_LIMP') {
+                    const bucket = parts[2] ? ` · ${parts[2]} limp${parts[2]==='1'?'':'s'}` : '';
+                    return `${sc.replace('_',' ')} · ${rest.replaceAll('_',' ')}${bucket}`;
+                }
+                return `${sc.replaceAll('_',' ')} · ${rest.replaceAll('_',' ')}`;
+            } catch(_) {
+                return spotKey;
+            }
+        }
+
+
         // Medal storage
         function loadMedals() {
             try { const s = localStorage.getItem(profileKey('gto_medals_v1')); return s ? JSON.parse(s) : {}; } catch(e) { return {}; }
@@ -3821,7 +4291,18 @@ function retryChallenge() {
                 document.getElementById('scenario-hint').innerText = `You raised, ${POS_LABELS[state.oppPos]} 3-bets to ${fmt$(get3betSize$(state.oppPos, state.currentPos))}...`;
             }
 
-            // Sample hand using EdgeWeight (edge-case focus), or use review override
+            // 
+
+            // Daily Run: enforce difficulty filter by scenario (low-risk gate).
+            if (dailyRunState && dailyRunState.active && !dailyRunAllowsScenario(state.scenario)) {
+                dailyRunState._rerollGuard = (dailyRunState._rerollGuard || 0) + 1;
+                if (dailyRunState._rerollGuard < 80) {
+                    return generateNextRound();
+                } else {
+                    console.warn('[DailyRun] Could not find an allowed spot after many rerolls. Proceeding with current spot.');
+                }
+            }
+// Sample hand using EdgeWeight (edge-case focus), or use review override
             if (state._reviewHandOverride) {
                 state.currentHand = state._reviewHandOverride;
                 state._reviewHandOverride = null;
@@ -3930,6 +4411,22 @@ function handleInput(action) {
             const hp = state.currentPos;
             const spotKey = sc === 'RFI' ? `${sc}|${hp}` : sc === 'VS_LIMP' ? `${sc}|${hp}_vs_${state.oppPos}_Limp|${state.limperBucket}` : (sc === 'SQUEEZE' || sc === 'SQUEEZE_2C') ? `${sc}|${state.oppPos}` : `${sc}|${hp}_vs_${state.oppPos}`;
 
+
+            // Daily Run tracking (UI wrapper only — does not affect SR or core stats)
+            if (dailyRunState && dailyRunState.active) {
+                dailyRunState.total++;
+                if (correct) {
+                    dailyRunState.correct++;
+                    dailyRunState.runStreak++;
+                } else {
+                    // run ends on first miss
+                    dailyRunState.ended = true;
+                }
+                if (!dailyRunState.bySpot[spotKey]) dailyRunState.bySpot[spotKey] = { total: 0, correct: 0 };
+                dailyRunState.bySpot[spotKey].total++;
+                if (correct) dailyRunState.bySpot[spotKey].correct++;
+            }
+
             // Update SR for this hand within the spot
             const handSRKey = `${spotKey}|${state.currentHand}`;
             const srGrade = correct ? 'Good' : 'Again';
@@ -3997,7 +4494,7 @@ function handleInput(action) {
                 const __bet$ = computeHeroBetDollarsForAction(action);
                 if (__bet$ != null) animateHeroBetDollars(__bet$);
 
-                updateUI(); saveProgress(); window.__roundGuard.nextTimer = setTimeout(() => { __endResolve(); if (!checkDrillComplete()) safeGenerateNextRound(); }, 600);
+                updateUI(); saveProgress(); window.__roundGuard.nextTimer = setTimeout(() => { __endResolve(); if (!checkDrillComplete() && !checkDailyRunComplete()) safeGenerateNextRound(); }, 600);
             } else {
                 state.sessionStats.streak = 0;
                 let correctLabel = ACTION_LABELS[correctAction] || correctAction;
@@ -4020,7 +4517,7 @@ function handleInput(action) {
                     const trainerHidden = document.getElementById('trainer-screen')?.classList?.contains('hidden');
                     const chartHidden = document.getElementById('chart-modal')?.classList?.contains('hidden');
                     if (trainerHidden) return;
-                    if (chartHidden && !checkDrillComplete()) { __endResolve(); safeGenerateNextRound(); }
+                    if (chartHidden && !checkDrillComplete() && !checkDailyRunComplete()) { __endResolve(); safeGenerateNextRound(); }
                 }, 3500);
 }
         }
@@ -5275,7 +5772,7 @@ function _renderChart(pos, target, scenario, oppPos) {
             __endResolve();
             if (document.getElementById('trainer-screen').classList.contains('hidden')) return;
             if (!_chartIsReview) {
-                if (!checkDrillComplete()) safeGenerateNextRound();
+                if (!checkDrillComplete() && !checkDailyRunComplete()) safeGenerateNextRound();
             }
             _chartIsReview = false;
         }
@@ -5360,7 +5857,18 @@ function _renderChart(pos, target, scenario, oppPos) {
                     <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-rose-500"></div><span class="text-[11px] text-slate-400 flex-1">Struggling</span><span class="text-[11px] font-black text-rose-400">${tiers.struggling}</span></div>
                     <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-slate-700"></div><span class="text-[11px] text-slate-400 flex-1">Unseen</span><span class="text-[11px] font-black text-slate-600">${tiers.unseen}</span></div>
                 </div>
-            </div>`;
+            </div>
+            <div class="mt-4 bg-slate-950/40 border border-slate-800/40 rounded-2xl px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🔥</span>
+                    <div>
+                        <div class="text-slate-200 font-black text-sm">Daily Run Streak</div>
+                        <div id="menu-daily-lock" class="text-slate-500 text-[10px] font-bold"></div>
+                    </div>
+                </div>
+                <div id="menu-daily-streak" class="text-indigo-200 font-black text-2xl">0</div>
+            </div>
+`;
 
             // Coverage bar
             const bM = allSpots.length ? Math.round(tiers.mastered / allSpots.length * 100) : 0;
@@ -5391,6 +5899,15 @@ function _renderChart(pos, target, scenario, oppPos) {
             </div>`;
 
             document.getElementById('menu-dashboard').innerHTML = html;
+
+            // Daily Run streak/lock
+            try {
+                const { meta, locked, msLeft } = getDailyRunLockInfo();
+                const dsEl = document.getElementById('menu-daily-streak');
+                if (dsEl) dsEl.textContent = String(meta.streak || 0);
+                const lockEl = document.getElementById('menu-daily-lock');
+                if (lockEl) lockEl.textContent = locked ? `Locked: ${formatDuration(msLeft)}` : 'Ready';
+            } catch(_) {}
 
             // Due badge on review button
             const badge = document.getElementById('menu-due-badge');
@@ -5488,6 +6005,24 @@ function _renderChart(pos, target, scenario, oppPos) {
 
         function drilldownScenario(sc) {
             const SCENARIO_LABELS = { RFI: 'RFI (Unopened)', FACING_RFI: 'Defending vs RFI', RFI_VS_3BET: 'vs 3-Bet', VS_LIMP: 'Vs Limpers (1–3+)', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C' };
+
+            // Daily Run meta (UI only)
+            const drm = loadDailyRunMeta();
+            const drmRuns = Number(drm.totalRuns || 0);
+            const drmDayStreak = Number(drm.streak || 0);
+            const drmRunsToday = Number(drm.runsToday || 0);
+            const drmBestRun = Number(drm.bestRun || 0);
+            const drmBestEasy = Number(drm.bestRunEasy || 0);
+            const drmBestMed = Number(drm.bestRunMedium || 0);
+            const drmBestHard = Number(drm.bestRunHard || 0);
+
+            const drmLastRun = Number(drm.lastRun || 0);
+            const drmLastTotal = Number(drm.lastTotal || 0);
+            const drmLastCorrect = Number(drm.lastCorrect || 0);
+            const drmLastWhen = drm.lastCompletedAt ? new Date(drm.lastCompletedAt) : null;
+            const drmLastOpt = drm.lastOption || null;
+            const drmLastOptName = drmLastOpt === 'easy' ? 'Warm‑Up' : drmLastOpt === 'hard' ? 'Boss' : drmLastOpt === 'medium' ? 'Grind' : null;
+            const drmLastLeak = drm.lastLeakKey ? prettySpotName(drm.lastLeakKey) : null;
             showDrilldown(SCENARIO_LABELS[sc], (content) => {
                 // Find all spots for this scenario
                 const spots = Object.keys(state.global.bySpot).filter(k => k.startsWith(sc + '|'));
@@ -5756,10 +6291,30 @@ function _renderChart(pos, target, scenario, oppPos) {
 
         window.onload = function(){ loadProgress(); try{ updateMenuUI(); }catch(e){} try{ updateOpenSizeUI(); }catch(e){} startCloudAutosaveLoop(false); };
         function showUserStats() {
-            renderUserStats();
-            document.getElementById('stats-screen').classList.remove('hidden');
+            hideAllScreens();
+            const screen = document.getElementById('stats-screen');
+            if (screen) screen.classList.remove('hidden');
+
+            // Render after screen is visible; if something fails, show a readable error instead of a blank page.
+            try {
+                renderUserStats();
+            } catch (e) {
+                const body = document.getElementById('stats-body');
+                if (body) {
+                    body.innerHTML = `
+                        <div class="p-5 rounded-2xl bg-slate-900 border border-rose-900/40">
+                            <div class="text-lg font-bold text-rose-300 mb-2">Stats render error</div>
+                            <div class="text-sm text-slate-300">This means a JS error prevented the stats UI from rendering.</div>
+                            <pre class="mt-3 text-xs whitespace-pre-wrap text-slate-200 bg-slate-950/60 p-3 rounded-xl overflow-auto">${String(e && (e.stack || e.message || e))}</pre>
+                        </div>`;
+                }
+                console.error('renderUserStats failed:', e);
+            }
         }
-        function hideUserStats() { document.getElementById('stats-screen').classList.add('hidden'); }
+        function hideUserStats() {
+            hideAllScreens();
+            showMenu();
+        }
 
                 // ============================================================
         // PROFILE (simple username) — namespaced storage keys
@@ -6330,6 +6885,24 @@ function _renderChart(pos, target, scenario, oppPos) {
             const seenPct = allSpots.length ? Math.round((allSpots.length - tiers.unseen) / allSpots.length * 100) : 0;
             const dueCount = SR.getDueSpots(false).length;
 
+            // Daily Run meta (UI only)
+            const drm = loadDailyRunMeta();
+            const drmRuns = Number(drm.totalRuns || 0);
+            const drmDayStreak = Number(drm.streak || 0);
+            const drmRunsToday = Number(drm.runsToday || 0);
+            const drmBestRun = Number(drm.bestRun || 0);
+            const drmBestEasy = Number(drm.bestRunEasy || 0);
+            const drmBestMed = Number(drm.bestRunMedium || 0);
+            const drmBestHard = Number(drm.bestRunHard || 0);
+
+            const drmLastRun = Number(drm.lastRun || 0);
+            const drmLastTotal = Number(drm.lastTotal || 0);
+            const drmLastCorrect = Number(drm.lastCorrect || 0);
+            const drmLastWhen = drm.lastCompletedAt ? new Date(drm.lastCompletedAt) : null;
+            const drmLastOpt = drm.lastOption || null;
+            const drmLastOptName = drmLastOpt === 'easy' ? 'Warm‑Up' : drmLastOpt === 'hard' ? 'Boss' : drmLastOpt === 'medium' ? 'Grind' : null;
+            const drmLastLeak = drm.lastLeakKey ? prettySpotName(drm.lastLeakKey) : null;
+
             // Medal totals
             let totalGold = 0, totalSilver = 0, totalBronze = 0;
             Object.values(medals).forEach(m => {
@@ -6384,10 +6957,45 @@ function _renderChart(pos, target, scenario, oppPos) {
                     <span class="text-[9px] text-slate-600">${seenPct}% explored</span>
                 </div>
             </div>`;
+            // === DAILY RUN CARD ===
+            html += `<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-slate-400 text-xs font-bold uppercase tracking-widest">Daily Run</div>
+                        <div class="text-slate-100 font-black text-xl mt-1">Day streak: <span class="text-indigo-300">${drmDayStreak}</span></div>
+                        <div class="text-slate-500 text-xs font-semibold mt-1">
+                            Runs: <span class="text-slate-200 font-black">${drmRuns}</span>
+                            · Best run: <span class="text-slate-200 font-black">${drmBestRun}</span>
+                            · Today: <span class="text-slate-200 font-black">${drmRunsToday}/3</span>
+                        </div>
+                        <div class="text-slate-600 text-[11px] font-semibold mt-1">Best by difficulty: 🟢 ${drmBestEasy} · 🟡 ${drmBestMed} · 🔴 ${drmBestHard}</div>
+                    </div>
+                    <button onclick="showDailyRunMenu()" class="px-4 py-2 bg-slate-950/40 border border-slate-700 hover:border-slate-500 rounded-xl font-black text-slate-200 text-sm">Open</button>
+                </div>
 
-            // === STATS GRID: 5 key metrics ===
-            html += `<div class="grid grid-cols-5 gap-2">
-                <div class="bg-slate-900 border border-slate-800 rounded-xl p-2.5 flex flex-col items-center">
+                ${drmLastWhen ? `
+                    <div class="mt-4 grid grid-cols-3 gap-3">
+                        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3">
+                            <div class="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Last run</div>
+                            <div class="text-slate-100 font-black text-xl mt-1">${drmLastRun}</div>
+                            <div class="text-slate-500 text-xs mt-1">${drmLastOptName || ''}</div>
+                        </div>
+                        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3">
+                            <div class="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Accuracy</div>
+                            <div class="text-slate-100 font-black text-xl mt-1">${drmLastCorrect}/${drmLastTotal}</div>
+                            <div class="text-slate-500 text-xs mt-1">${drmLastWhen ? drmLastWhen.toLocaleDateString() : ''}</div>
+                        </div>
+                        <div class="bg-slate-950/40 border border-slate-800 rounded-2xl p-3">
+                            <div class="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Leak</div>
+                            <div class="text-slate-100 font-black text-base mt-1 leading-tight">${drmLastLeak || '—'}</div>
+                        </div>
+                    </div>
+                ` : `
+                    <div class="mt-4 text-slate-500 text-sm font-semibold">No Daily Runs completed yet.</div>
+                `}
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-2.5 flex flex-col items-center">
                     <p class="text-[7px] text-slate-500 uppercase font-bold mb-0.5">Hands</p>
                     <p class="text-base font-black text-slate-200">${total >= 1000 ? (total/1000).toFixed(1)+'k' : total}</p>
                 </div>
