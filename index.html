@@ -4386,7 +4386,7 @@ function handleInput(action) {
                     }
                     // Raiser raises
                     const oppCoords = getSeatCoords(heroPos, oppPos);
-                    animateChip(betsLayer, oppCoords, 5);
+                    animateChip(betsLayer, oppCoords, getVillainOpenSize$() / BB_DOLLARS);
                     showActionBadge(document.getElementById(`seat-${oppPos}`), 'RAISE ' + fmt$(getVillainOpenSize$()), 'badge-raise', 700);
                     await delay(300);
                     // Fold positions between raiser and hero
@@ -4419,7 +4419,7 @@ function handleInput(action) {
                     }
                     // Hero raises
                     const heroCoords = getSeatCoords(heroPos, heroPos);
-                    animateChip(betsLayer, heroCoords, 5);
+                    animateChip(betsLayer, heroCoords, getOpenSizeBB());
                     showActionBadge(document.getElementById(`seat-${heroPos}`), 'RAISE ' + fmt$(getOpenSize$()), 'badge-raise', 700);
                     await delay(300);
                     // Fold between hero and 3bettor
@@ -4516,7 +4516,7 @@ function handleInput(action) {
                         await delay(100);
                     }
                     const openerCoords = getSeatCoords(heroPos, opener);
-                    animateChip(betsLayer, openerCoords, 5);
+                    animateChip(betsLayer, openerCoords, getVillainOpenSize$() / BB_DOLLARS);
                     showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + fmt$(getVillainOpenSize$()), 'badge-raise', 700);
                     await delay(300);
                     for (let k = openerIdx + 1; k < callerIdx; k++) {
@@ -4530,7 +4530,7 @@ function handleInput(action) {
                         await delay(100);
                     }
                     const callerCoords = getSeatCoords(heroPos, caller);
-                    animateChip(betsLayer, callerCoords, 5);
+                    animateChip(betsLayer, callerCoords, getVillainOpenSize$() / BB_DOLLARS);
                     showActionBadge(document.getElementById(`seat-${caller}`), 'CALL', 'badge-call', 700);
                     await delay(300);
                     for (let k = callerIdx + 1; k < actionOrder.length; k++) {
@@ -4567,7 +4567,7 @@ function handleInput(action) {
                         await delay(100);
                     }
                     // Opener raises
-                    animateChip(betsLayer, getSeatCoords(heroPos, opener), 5);
+                    animateChip(betsLayer, getSeatCoords(heroPos, opener), getVillainOpenSize$() / BB_DOLLARS);
                     showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + fmt$(getVillainOpenSize$()), 'badge-raise', 700);
                     await delay(300);
                     // Fold between opener and caller1
@@ -4582,7 +4582,7 @@ function handleInput(action) {
                         await delay(100);
                     }
                     // Caller1 calls
-                    animateChip(betsLayer, getSeatCoords(heroPos, c1), 5);
+                    animateChip(betsLayer, getSeatCoords(heroPos, c1), getVillainOpenSize$() / BB_DOLLARS);
                     showActionBadge(document.getElementById(`seat-${c1}`), 'CALL', 'badge-call', 700);
                     await delay(300);
                     // Fold between caller1 and caller2
@@ -4597,7 +4597,7 @@ function handleInput(action) {
                         await delay(100);
                     }
                     // Caller2 calls
-                    animateChip(betsLayer, getSeatCoords(heroPos, c2), 5);
+                    animateChip(betsLayer, getSeatCoords(heroPos, c2), getVillainOpenSize$() / BB_DOLLARS);
                     showActionBadge(document.getElementById(`seat-${c2}`), 'CALL', 'badge-call', 700);
                     await delay(300);
                     // Fold between caller2 and hero
