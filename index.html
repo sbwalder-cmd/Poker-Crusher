@@ -5026,7 +5026,7 @@ function renderButtons(hidden) {
                 if (!checkDrillComplete()) safeGenerateNextRound();
             }
             _chartIsReview = false;
-        } _chartIsReview = false; }
+        }
         function startConfiguredTraining() {
             try { __clearNextTimer(); __endResolve(); } catch(_) {}
             try { window.__tableAnimToken = (window.__tableAnimToken || 0) + 1; } catch(_) {}
@@ -5502,7 +5502,7 @@ function renderButtons(hidden) {
             };
         })();
 
-        window.onload = function(){ loadProgress(); startCloudAutosaveLoop(false); };
+        window.onload = function(){ loadProgress(); try{ updateMenuUI(); }catch(e){} startCloudAutosaveLoop(false); };
         function showUserStats() {
             renderUserStats();
             document.getElementById('stats-screen').classList.remove('hidden');
