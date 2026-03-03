@@ -2743,7 +2743,8 @@
             active: false,
             scenario: 'RFI',
             handCount: 25,
-            positions: [...ALL_POSITIONS]
+            positions: [...ALL_POSITIONS],
+            lockedLimperBucket: null  // set by challenge nodes to lock a specific bucket
         };
 
         // Medal storage
@@ -2925,6 +2926,9 @@
             // Extra per-node params (e.g., limper bucket)
             if (node.scenario === 'VS_LIMP' && node.limperBucket) {
                 state.limperBucket = node.limperBucket;
+                drillState.lockedLimperBucket = node.limperBucket;
+            } else {
+                drillState.lockedLimperBucket = null;
             }
 
             // Mark active challenge run
@@ -2964,6 +2968,7 @@
                 drillState._savedConfig = null;
             }
             drillState.active = false;
+            drillState.lockedLimperBucket = null;
 
             document.getElementById('trainer-screen').classList.add('hidden');
             document.getElementById('challenge-screen').classList.remove('hidden');
@@ -3642,20 +3647,11 @@ function retryChallenge() {
                     const pairs = Object.keys(facingRfiRanges).filter(p => state.config.positions.includes(p.split('_vs_')[0]));
                     const key = pairs[Math.floor(Math.random() * pairs.length)];
                     [state.currentPos, state.oppPos] = key.split('_vs_');
-                
-    } else if (state.scenario === 'RFI_VS_3BET' || state.scenario === 'RFI_VS_3') {
-        const villain3bet$ = get3betSize$(state.oppPos, state.currentPos);
-        const heroIP = postflopIP(state.currentPos, state.oppPos);
-        const fourBet$ = get4betSize$(state.currentPos, state.oppPos);
-        const main = `4-BET TO ${fmt$(fourBet$)}`;
-        const hint = heroIP ? `4-bet IP: 2.2× 3-bet (${fmt$(villain3bet$)})` : `4-bet OOP: 2.5× 3-bet (${fmt$(villain3bet$)})`;
-        setSizingHint(hint);
-        container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
-            <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-            <button onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
-            <button onclick="handleInput('4BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">${main}</button>
-        </div>`;
-} else if (state.scenario === 'VS_LIMP') {
+                } else if (state.scenario === 'RFI_VS_3BET' || state.scenario === 'RFI_VS_3') {
+                    const pairs = Object.keys(rfiVs3BetRanges).filter(p => state.config.positions.includes(p.split('_vs_')[0]));
+                    const key = pairs[Math.floor(Math.random() * pairs.length)];
+                    [state.currentPos, state.oppPos] = key.split('_vs_');
+                } else if (state.scenario === 'VS_LIMP') {
                     // Filter limp keys to enabled hero positions
                     const limpKeys = Object.keys(allFacingLimps).filter(k => {
                         const m = k.match(/(.+)_vs_(.+)_Limp/);
@@ -3665,8 +3661,8 @@ function retryChallenge() {
                     const m = key.match(/(.+)_vs_(.+)_Limp/);
                     state.currentPos = m[1];
                     state.oppPos = m[2]; // firstLimper position
-                    // Pick limper bucket
-                    state.limperBucket = pickLimperBucket();
+                    // Pick limper bucket — respect challenge node lock if active
+                    state.limperBucket = (drillState.lockedLimperBucket) ? drillState.lockedLimperBucket : pickLimperBucket();
                     // Generate limper positions for multi-limp
                     if (state.limperBucket === '1L') {
                         state.limperPositions = [state.oppPos];
