@@ -2202,7 +2202,7 @@ function handlePostflopInput(action){
         if (result.correct) dailyRunState.bySpot[_drSpotKey].correct++;
     }
 
-    const logEntry={ scenario:sc, pos:spot.heroPos, oppPos:spot.villainPos, hand:flopStr(spot.flopCards), action, correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), correct:result.correct, spotKey:spot.spotKey, archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback, flopCards:spot.flopCards, strategy:spot.strategy, grade:result.grade, freqPct:result.freqPct, reasoning:result.reasoning };
+    const logEntry={ scenario:sc, pos:spot.heroPos, oppPos:spot.villainPos, hand:flopStr(spot.flopCards), action, correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), correct:result.correct, spotKey:spot.spotKey, archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback, flopCards:spot.flopCards, strategy:spot.strategy, grade:result.grade, freqPct:result.freqPct, reasoning:result.reasoning, heroHand:spot.heroHand||null, heroHandClass:spot.heroHandClass||null };
     state.sessionLog.unshift(logEntry);
 
     if(result.correct){
@@ -2230,16 +2230,36 @@ function handlePostflopInput(action){
     }
 }
 
+// Dark-background-safe suit color (for modals with bg-slate-900)
+function _darkBgSuitColor(suit){ return (suit==='h'||suit==='d')?'#dc2626':'#e2e8f0'; }
+// Render hero hole cards as styled HTML for dark-bg modal
+function _heroCardsHtml(heroHand){
+    if(!heroHand||!heroHand.cards||heroHand.cards.length<2) return '';
+    return heroHand.cards.map(c => {
+        const color=_darkBgSuitColor(c.suit);
+        return `<span style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:50px;background:#1e293b;border:1.5px solid #334155;border-radius:6px;font-weight:900;font-size:14px;color:${color};line-height:1;flex-direction:column;gap:1px;"><span>${c.rank}</span><span style="font-size:12px;">${SUIT_SYMBOLS[c.suit]}</span></span>`;
+    }).join(' ');
+}
+// Render flop cards for dark-bg modal (override suit colors)
+function _flopCardsHtmlDark(cards){
+    if(!cards||!cards.length) return '<span class="text-slate-500">—</span>';
+    return cards.map(c => { const color=_darkBgSuitColor(c.suit); return `<span style="color:${color};font-weight:900;">${c.rank}${SUIT_SYMBOLS[c.suit]}</span>`; }).join(' ');
+}
 function showPostflopFeedback(spot,result){
     let modal=document.getElementById('postflop-feedback-modal');
     if(!modal){ modal=document.createElement('div'); modal.id='postflop-feedback-modal'; modal.className='fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6'; modal.onclick=e=>{if(e.target===modal) closePostflopFeedback();}; document.body.appendChild(modal); }
     const archLabel=ARCHETYPE_LABELS[spot.boardArchetype]||spot.boardArchetype;
     const actions = (spot.strategy && spot.strategy.actions) || {};
     const betFreq=Math.round((actions.bet33||0)*100); const checkFreq=Math.round((actions.check||0)*100);
-    const flopHtml = (spot.flopCards && spot.flopCards.length) ? _flopCardsHtml(spot.flopCards) : '<span class="text-slate-500">—</span>';
+    const flopHtml = _flopCardsHtmlDark(spot.flopCards);
+    // Hero hand display
+    const heroHtml = _heroCardsHtml(spot.heroHand);
+    const handClassLabel = (spot.heroHandClass && typeof HAND_CLASS_LABELS !== 'undefined') ? (HAND_CLASS_LABELS[spot.heroHandClass] || spot.heroHandClass) : '';
+    const heroSection = heroHtml ? `<div class="flex items-center gap-3 mb-3 bg-slate-950/50 rounded-xl px-3 py-2.5 border border-slate-800/50"><div class="flex items-center gap-1.5">${heroHtml}</div>${handClassLabel ? `<span class="text-xs font-bold text-slate-300">${handClassLabel}</span>` : ''}</div>` : '';
     modal.innerHTML=`<div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl">
         <div class="flex items-center justify-between mb-3"><div class="text-xs font-black uppercase tracking-widest text-slate-400">${POS_LABELS[spot.heroPos]} vs ${POS_LABELS[spot.villainPos]} · ${spot.positionState}</div><button onclick="closePostflopFeedback()" class="text-slate-500 hover:text-white text-lg font-bold">✕</button></div>
         <div class="text-sm font-bold text-slate-200 mb-2">${flopHtml} <span class="text-slate-500 text-xs">(${archLabel})</span></div>
+        ${heroSection}
         <div class="flex gap-2 items-center mb-3"><div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden"><div class="h-full bg-orange-500 rounded-full" style="width:${betFreq}%"></div></div><div class="text-xs font-black text-orange-400 w-12 text-right">C-Bet ${betFreq}%</div></div>
         <div class="flex gap-2 items-center mb-4"><div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden"><div class="h-full bg-slate-500 rounded-full" style="width:${checkFreq}%"></div></div><div class="text-xs font-black text-slate-400 w-12 text-right">Check ${checkFreq}%</div></div>
         <div class="text-xs text-slate-400 leading-relaxed">${result.reasoning || result.feedback || ''}</div></div>`;
