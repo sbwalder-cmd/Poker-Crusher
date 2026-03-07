@@ -2227,7 +2227,7 @@ function handlePostflopInput(action){
     if(!state.global.bySpot[spot.spotKey]) state.global.bySpot[spot.spotKey]={total:0,correct:0};
     state.global.bySpot[spot.spotKey].total++;
 
-    const logEntry={ scenario:sc, pos:spot.heroPos, oppPos:spot.villainPos, hand:flopStr(spot.flopCards), action, correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), correct:result.correct, spotKey:spot.spotKey, archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback };
+    const logEntry={ scenario:sc, pos:spot.heroPos, oppPos:spot.villainPos, hand:flopStr(spot.flopCards), action, correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), correct:result.correct, spotKey:spot.spotKey, archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback, flopCards:spot.flopCards, heroHand:spot.heroHand, heroHandClass:spot.heroHandClass, strategy:spot.strategy, grade:result.grade, freqPct:result.freqPct, reasoning:result.reasoning };
     state.sessionLog.unshift(logEntry);
 
     if(result.correct){
@@ -2239,30 +2239,69 @@ function handlePostflopInput(action){
         postflopStats.byPosition[spot.positionState].correct++;
         state.global.byScenario[sc].correct++;
         state.global.bySpot[spot.spotKey].correct++;
-        showToast(result.grade==='marginal'?"Correct · Close spot":"Correct","correct",result.grade==='marginal'?700:500);
         updateUI(); saveProgress(); savePostflopStats();
-        window.__roundGuard.nextTimer=setTimeout(()=>{ __endResolve(); if(!checkDrillComplete()&&!checkDailyRunComplete()) safeGenerateNextRound(); },600);
+        // Show feedback modal for correct answers — user taps ✕ or backdrop to advance.
+        setTimeout(()=>showPostflopFeedback(spot,result,true),150);
     } else {
         postflopStats.streak=0; state.sessionStats.streak=0;
-        const fb=result.grade==='marginal_wrong'?`Close · ${result.preferredLabel} preferred (${result.freqPct}%)`:`Incorrect · ${result.preferredLabel} (${result.freqPct}%)`;
-        showToast(fb,"incorrect",2000);
         updateUI(); saveProgress(); savePostflopStats();
-        setTimeout(()=>showPostflopFeedback(spot,result),200);
-        setTimeout(()=>{ const m=document.getElementById('postflop-feedback-modal'); if(m&&!m.classList.contains('hidden')) closePostflopFeedback(); if(!checkDrillComplete()&&!checkDailyRunComplete()){ __endResolve(); safeGenerateNextRound(); } },4000);
+        // Show feedback modal — no auto-advance; user must close it.
+        setTimeout(()=>showPostflopFeedback(spot,result,false),150);
     }
 }
 
-function showPostflopFeedback(spot,result){
+function showPostflopFeedback(spot,result,isCorrect){
     let modal=document.getElementById('postflop-feedback-modal');
-    if(!modal){ modal=document.createElement('div'); modal.id='postflop-feedback-modal'; modal.className='fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6'; modal.onclick=e=>{if(e.target===modal) closePostflopFeedback();}; document.body.appendChild(modal); }
+    if(!modal){ modal=document.createElement('div'); modal.id='postflop-feedback-modal'; modal.className='fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6'; document.body.appendChild(modal); }
+    // Backdrop tap closes (and advances round when in active session)
+    modal.onclick=function(e){ if(e.target===modal) closePostflopFeedback(true); };
+
     const archLabel=ARCHETYPE_LABELS[spot.boardArchetype]||spot.boardArchetype;
-    const betFreq=Math.round((spot.strategy.actions.bet33||0)*100); const checkFreq=Math.round((spot.strategy.actions.check||0)*100);
-    modal.innerHTML=`<div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl">
-        <div class="flex items-center justify-between mb-3"><div class="text-xs font-black uppercase tracking-widest text-slate-400">${POS_LABELS[spot.heroPos]} vs ${POS_LABELS[spot.villainPos]} · ${spot.positionState}</div><button onclick="closePostflopFeedback()" class="text-slate-500 hover:text-white text-lg font-bold">✕</button></div>
-        <div class="text-sm font-bold text-slate-200 mb-2">${_flopCardsHtml(spot.flopCards)} <span class="text-slate-500 text-xs">(${archLabel})</span></div>
-        <div class="flex gap-2 items-center mb-3"><div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden"><div class="h-full bg-orange-500 rounded-full" style="width:${betFreq}%"></div></div><div class="text-xs font-black text-orange-400 w-12 text-right">C-Bet ${betFreq}%</div></div>
-        <div class="flex gap-2 items-center mb-4"><div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden"><div class="h-full bg-slate-500 rounded-full" style="width:${checkFreq}%"></div></div><div class="text-xs font-black text-slate-400 w-12 text-right">Check ${checkFreq}%</div></div>
-        <div class="text-xs text-slate-400 leading-relaxed">${result.reasoning}</div></div>`;
+    const strat=spot.strategy||{actions:{bet33:0,check:0},reasoning:''};
+    const betFreq=Math.round((strat.actions.bet33||0)*100);
+    const checkFreq=Math.round((strat.actions.check||0)*100);
+
+    // Header verdict line
+    const handClassLabel = spot.heroHandClass ? (HAND_CLASS_LABELS[spot.heroHandClass]||spot.heroHandClass) : null;
+    let verdictHtml, borderCls;
+    if(isCorrect){
+        const gradeTxt = result.grade==='marginal' ? 'Correct · Close spot' : 'Correct';
+        verdictHtml=`<span class="text-emerald-400 font-black">✓ ${gradeTxt}</span>${handClassLabel?` <span class="text-slate-500 text-[10px]">[${handClassLabel}]</span>`:''}`;
+        borderCls='border-emerald-800/60';
+    } else {
+        const gradeTxt = result.grade==='marginal_wrong' ? 'Close' : 'Incorrect';
+        verdictHtml=`<span class="text-rose-400 font-black">✗ ${gradeTxt}</span>${handClassLabel?` <span class="text-slate-500 text-[10px]">[${handClassLabel}]</span>`:''}`;
+        borderCls='border-rose-900/60';
+    }
+
+    // Hero hand html
+    const heroCardHtml = (spot.heroHand&&spot.heroHand.cards&&spot.heroHand.cards.length===2)
+        ? spot.heroHand.cards.map(c=>{const col=flopSuitColor(c.suit);return `<span style="color:${col};font-weight:900;">${c.rank}${SUIT_SYMBOLS[c.suit]}</span>`;}).join(' ')
+        : '';
+
+    // Your action vs preferred
+    const yourActionLabel = result.correct ? (result.preferredLabel) : (result.preferredLabel==='C-Bet'?'Check':'C-Bet');
+    const correctLabel = result.preferredLabel;
+
+    modal.innerHTML=`<div class="bg-slate-900 border ${borderCls} rounded-2xl p-5 max-w-sm w-full shadow-2xl">
+        <div class="flex items-center justify-between mb-3">
+            <div class="text-xs font-black uppercase tracking-widest text-slate-400">${POS_LABELS[spot.heroPos]} vs ${POS_LABELS[spot.villainPos]} · ${spot.positionState}</div>
+            <button onclick="closePostflopFeedback(true)" class="text-slate-500 hover:text-white text-lg font-bold leading-none">✕</button>
+        </div>
+        <div class="flex items-center gap-3 mb-3">
+            ${heroCardHtml ? `<div class="text-sm font-black text-white">${heroCardHtml}</div><div class="text-slate-600 text-xs">on</div>` : ''}
+            <div class="text-sm font-bold text-slate-200">${_flopCardsHtml(spot.flopCards)} <span class="text-slate-500 text-xs">(${archLabel})</span></div>
+        </div>
+        <div class="text-sm mb-3">${verdictHtml}${!isCorrect?` · <span class="text-slate-400 text-xs">Correct: <span class="text-emerald-400 font-bold">${correctLabel}</span></span>`:''}</div>
+        <div class="flex gap-2 items-center mb-2"><div class="flex-1 bg-slate-800 rounded-full h-2.5 overflow-hidden"><div class="h-full bg-orange-500 rounded-full" style="width:${betFreq}%"></div></div><div class="text-xs font-black text-orange-400 w-14 text-right">C-Bet ${betFreq}%</div></div>
+        <div class="flex gap-2 items-center mb-4"><div class="flex-1 bg-slate-800 rounded-full h-2.5 overflow-hidden"><div class="h-full bg-slate-500 rounded-full" style="width:${checkFreq}%"></div></div><div class="text-xs font-black text-slate-400 w-14 text-right">Check ${checkFreq}%</div></div>
+        <div class="text-xs text-slate-400 leading-relaxed">${strat.reasoning||''}</div>
+        <div class="mt-4 text-center"><button onclick="closePostflopFeedback(true)" class="text-xs text-slate-500 hover:text-white font-bold uppercase tracking-widest">Tap anywhere to continue</button></div>
+    </div>`;
     modal.classList.remove('hidden');
 }
-function closePostflopFeedback(){ const m=document.getElementById('postflop-feedback-modal'); if(m) m.classList.add('hidden'); }
+function closePostflopFeedback(andAdvance){
+    const m=document.getElementById('postflop-feedback-modal');
+    if(m) m.classList.add('hidden');
+    if(andAdvance){ __endResolve(); if(!checkDrillComplete()&&!checkDailyRunComplete()) safeGenerateNextRound(); }
+}
