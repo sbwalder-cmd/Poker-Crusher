@@ -1229,6 +1229,8 @@ function startConfiguredTraining() {
     const ch = document.getElementById('challenge-screen');
     if (ch) ch.classList.add('hidden');
     document.getElementById('trainer-screen').classList.remove('hidden');
+    // Start layout observer — must be called after trainer screen is visible.
+    if (typeof window._trainerLayoutBoot === 'function') window._trainerLayoutBoot();
     updateUI();
     if (typeof updateDrillCounter === 'function') updateDrillCounter(); // IMP 3: guard against missing function
     safeGenerateNextRound();
@@ -1254,6 +1256,8 @@ function confirmExit() {
 
 function exitToMenu() {
     try { __clearNextTimer(); __endResolve(); } catch(_) {}
+    // Disconnect the layout ResizeObserver — re-connected on next trainer entry via _trainerLayoutBoot.
+    if (typeof window._trainerLayoutTeardown === 'function') window._trainerLayoutTeardown();
     try { document.getElementById('dr-round-counter').classList.add('hidden'); } catch(_) {}
     try { document.getElementById('streak-best-block').classList.add('hidden'); } catch(_) {}
     try { window.__tableAnimToken = (window.__tableAnimToken || 0) + 1; } catch(_) {}
@@ -1277,6 +1281,12 @@ function exitToMenu() {
     reviewSession.active = false;
     // Ensure challenge mode flags are cleared so they can't contaminate the next session
     if (typeof challengeState !== 'undefined') challengeState.active = false;
+    // Daily Run cleanup — native replacement for the removed installDailyRunExitPatch monkey-patch.
+    // Restores state.config from dailyRunState._savedConfig if a DR was interrupted mid-run.
+    if (typeof resetDailyRunState === 'function' &&
+        dailyRunState && (dailyRunState.active || dailyRunState.ended || dailyRunState._savedConfig)) {
+        resetDailyRunState({ restoreConfig: true });
+    }
 
     if (wasOpenTraining && handsPlayed >= 5) {
         showSessionSummary();
@@ -1879,24 +1889,15 @@ function drilldownSpot(spotKey) {
         }
     });
 
-    // Start observing once trainer is shown
-    const origStart = startConfiguredTraining;
-    startConfiguredTraining = function() {
-        origStart();
+    // Expose boot/teardown helpers so every trainer entry path can call them directly
+    // without needing the IIFE to monkey-patch function assignments at module load time.
+    // Called by: startConfiguredTraining, _startReviewWithQueue, startDailyRun.
+    window._trainerLayoutBoot = function() {
         const felt = document.getElementById('poker-felt-container');
-        if (felt) { ro.observe(felt); }
+        if (felt) ro.observe(felt);
     };
-    const origReview = startReviewSession;
-    startReviewSession = function() {
-        origReview();
-        const felt = document.getElementById('poker-felt-container');
-        if (felt) { ro.observe(felt); }
-    };
-    // Clean up on exit
-    const origExit = exitToMenu;
-    exitToMenu = function() {
+    window._trainerLayoutTeardown = function() {
         ro.disconnect();
-        origExit();
     };
 })();
 
