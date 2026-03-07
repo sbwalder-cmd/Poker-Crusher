@@ -494,12 +494,9 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
             }
             await delay(150);
         }
-        // Collect all per-seat chips into a single central pot badge.
-        // The individual chips showed each player's action; now they belong to the pot.
-        if (!isStale()) {
-            betsLayer.innerHTML = '';
-            try { renderPotBadge(betsLayer, getScenarioPot$(scenario)); } catch(_) {}
-        }
+        // Leave per-seat chips in place so the player can see each position's action
+        // while deciding. The pot badge is only appropriate after a flop is dealt;
+        // the postflop path uses updateTable() which calls renderPotBadge directly.
         if (onDone && !isStale()) { __doneCalled = true; onDone(); }
         } catch (e) {
             if (e === STALE) return; // silently abort stale animations
