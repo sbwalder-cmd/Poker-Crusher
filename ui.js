@@ -748,17 +748,21 @@ function getSRPPot$(preflopFamily) {
 // Safe zone: top ~38% desktop, ~36% mobile.
 function renderPotBadge(betsLayer, total$) {
     const isMob = (SEAT_COORDS === SEAT_COORDS_MOBILE);
-    const potTop = isMob ? 36 : 38;
+    // Position in the gap between the left side-seats (left ~3-12%) and the
+    // community cards (centered at left:50%). left:22% sits comfortably in that
+    // gap on both desktop and mobile. Vertically aligned with the card row (top:50%).
+    const potLeft = isMob ? 21 : 22;
+    const potTop  = 50;
     const badge = document.createElement('div');
     badge.id = 'pot-badge';
-    badge.className = 'absolute z-35 pointer-events-none flex items-center gap-1.5';
-    badge.style.cssText = `left:50%;top:${potTop}%;transform:translate(-50%,-50%);`;
+    badge.className = 'absolute z-35 pointer-events-none flex flex-col items-center gap-0.5';
+    badge.style.cssText = `left:${potLeft}%;top:${potTop}%;transform:translate(-50%,-50%);`;
     badge.innerHTML =
         `<div style="width:var(--pot-chip,18px);height:var(--pot-chip,18px);" ` +
-        `class="rounded-full bg-amber-500 border-2 border-white/30 shadow-md flex-shrink-0"></div>` +
+        `class="rounded-full bg-amber-500 border-2 border-white/30 shadow-md"></div>` +
         `<span style="font-size:var(--chip-font,9px);" ` +
         `class="font-black text-amber-300 bg-black/60 px-1.5 py-0.5 rounded-full whitespace-nowrap">` +
-        `POT $${total$}</span>`;
+        `$${total$}</span>`;
     betsLayer.appendChild(badge);
 }
 
