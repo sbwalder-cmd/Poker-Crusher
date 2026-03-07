@@ -1812,5 +1812,5 @@ const POSTFLOP_STRATEGY_V2 = {};
 const ARCHETYPE_LABELS={A_HIGH_DRY:'A-high dry',A_HIGH_DYNAMIC:'A-high dynamic',BROADWAY_STATIC:'Broadway static',BROADWAY_DYNAMIC:'Broadway dynamic',MID_DISCONNECTED:'Mid disconnected',MID_CONNECTED:'Mid connected',LOW_DISCONNECTED:'Low disconnected',LOW_CONNECTED:'Low connected',PAIRED_HIGH:'Paired high',PAIRED_LOW:'Paired low',MONOTONE:'Monotone',TRIPS:'Trips'};
 function flopCardStr(card){return card.rank+(SUIT_SYMBOLS[card.suit]||card.suit);}
 function flopStr(cards){return cards.map(flopCardStr).join(' ');}
-function flopSuitColor(suit){return(suit==='h'||suit==='d')?'#ef4444':'#e2e8f0';}
+function flopSuitColor(suit){return(suit==='h'||suit==='d')?'#dc2626':'#0f172a';}
 function isPostflopSpotKey(key){return key.startsWith('SRP|')||key.startsWith('3BP|')||key.startsWith('LIMP_POT|');}
