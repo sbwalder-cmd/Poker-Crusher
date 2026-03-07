@@ -379,6 +379,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 h-[100dvh] flex flex-col items-center overflow-hidden font-sans">
     <div id="miss-flash-overlay"></div>
+    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex justify-center pointer-events-none px-4"></div>
 
     <!-- MENU SCREEN -->
     <div id="menu-screen" class="w-full max-w-md p-6 flex flex-col items-center justify-center h-full gap-5 text-center z-10">
@@ -824,8 +825,8 @@
                 <div id="hand-display" class="flex items-center justify-center" style="gap:var(--card-gap, 12px);"></div>
             </div>
 
-            <!-- Feedback toast -->
-            <div id="toast-container" class="shrink-0 w-full flex justify-center" style="min-height:var(--toast-h, 28px); max-width:var(--btn-max-w, 448px);"></div>
+            <!-- Toast spacer (global toast container is mounted near <body>) -->
+            <div id="trainer-toast-spacer" class="shrink-0 w-full" style="min-height:var(--toast-h, 28px); max-width:var(--btn-max-w, 448px);"></div>
 
             <!-- Action buttons -->
             <div id="action-buttons" class="shrink-0 w-full z-20" style="max-width:var(--btn-max-w, 448px);"></div>
@@ -985,11 +986,11 @@
 
 
     <!-- PokerCrusher JS (split into modules — order matters!) -->
-<script defer src="ranges.js"></script>
-<script defer src="cloud.js"></script>
-<script defer src="engine.js"></script>
-<script defer src="training.js"></script>
-<script defer src="ui.js"></script>
+    <script defer src="ranges.js"></script>
+    <script defer src="cloud.js"></script>
+    <script defer src="engine.js"></script>
+    <script defer src="training.js"></script>
+    <script defer src="ui.js"></script>
 
 <script>
 // Firebase Cloud Sync bootstrap (safe for file://).
