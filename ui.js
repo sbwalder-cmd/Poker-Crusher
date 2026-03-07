@@ -1528,8 +1528,8 @@ function formatSpotLabel(rawSpotId) {
     if (rawSpotId === '1L' || rawSpotId === '2L' || rawSpotId === '3P') return '';
     return POS_LABELS[clean] || clean;
 }
-const SCENARIO_SHORT = { RFI: 'RFI', FACING_RFI: 'vs RFI', RFI_VS_3BET: 'vs 3Bet', VS_LIMP: 'vs Limps', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push/Fold' };
-const ACTION_LABELS = { FOLD: 'Fold', RAISE: 'Raise', CALL: 'Call', '3BET': '3-Bet', '4BET': '4-Bet', ISO: 'Iso Raise', OVERLIMP: 'Overlimp', SQUEEZE: 'Squeeze', SHOVE: 'Shove All-In' };
+const SCENARIO_SHORT = { RFI: 'RFI', FACING_RFI: 'vs RFI', RFI_VS_3BET: 'vs 3Bet', VS_LIMP: 'vs Limps', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push/Fold', POSTFLOP_CBET: 'Flop C-Bet' };
+const ACTION_LABELS = { FOLD: 'Fold', RAISE: 'Raise', CALL: 'Call', '3BET': '3-Bet', '4BET': '4-Bet', ISO: 'Iso Raise', OVERLIMP: 'Overlimp', SQUEEZE: 'Squeeze', SHOVE: 'Shove All-In', CHECK: 'Check', CBET: 'C-Bet' };
 
 function showSessionLog() {
     const list = document.getElementById('session-log-list');
@@ -1596,7 +1596,8 @@ function logRowChart(idx) {
                 ? (ACTION_LABELS[e.action] || e.action)
                 : (ACTION_LABELS[e.correctAction] || e.correctAction),
             freqPct: e.freqPct || 0,
-            reasoning: e.reasoning || ''
+            reasoning: e.reasoning || '',
+            feedback: e.feedback || ''
         };
         showPostflopFeedback(logSpot, logResult, e.correct);
         return;
