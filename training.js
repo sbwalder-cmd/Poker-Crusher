@@ -2187,10 +2187,25 @@ function _flopCardsHtml(cards){ return cards.map(c => { const color=flopSuitColo
 
 function renderPostflopButtons(hidden){
     const container=document.getElementById('action-buttons');
-    setSizingHint('');
     const sc=hidden?'action-buttons-hidden':'action-buttons-revealed';
     const bs=`style="padding:var(--btn-pad, 14px) 0;font-size:var(--btn-font, 14px);"`;
-    container.innerHTML=`<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handlePostflopInput('CHECK')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">CHECK</button><button onclick="handlePostflopInput('CBET')" ${bs} class="bg-orange-600 rounded-2xl font-black text-white shadow-lg">C-BET</button></div>`;
+
+    // Compute pot and c-bet size from the active postflop spot so the button
+    // shows a dollar amount and the sizing hint explains the math.
+    let cbetLabel = 'C-BET';
+    let hintText = '';
+    try {
+        const spot = state.postflop;
+        if (spot && typeof getSRPPot$ === 'function') {
+            const pot$ = getSRPPot$(spot.preflopFamily);
+            const cbet$ = Math.round(pot$ * 0.33);
+            cbetLabel = `C-BET $${cbet$}`;
+            hintText = `33% pot · pot = $${pot$}`;
+        }
+    } catch(_) {}
+
+    setSizingHint(hintText);
+    container.innerHTML=`<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handlePostflopInput('CHECK')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">CHECK</button><button onclick="handlePostflopInput('CBET')" ${bs} class="bg-orange-600 rounded-2xl font-black text-white shadow-lg">${cbetLabel}</button></div>`;
 }
 
 function renderCommunityCards(cards){
