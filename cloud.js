@@ -488,18 +488,24 @@ async function cloudLoadNow() {
     try {
         showToast('Loading from cloud...', 'correct', 900);
         const result = await window.PokerCrusherCloud.load(docId);
+        console.log('[PokerCrusher] Cloud load raw result:', result);
         if (!result) {
             showToast('No cloud data found for that username', 'incorrect', 2200);
             return;
         }
+        console.log('[PokerCrusher] result type:', typeof result);
+        console.log('[PokerCrusher] result.data:', result.data);
+        console.log('[PokerCrusher] result keys:', Object.keys(result));
         const payload = result;
         const ok = applyTrainerPayload(payload);
         if (ok) {
             showToast('Loaded from cloud (reloading)', 'correct', 1400);
             setTimeout(() => location.reload(), 400);
+        } else {
+            showToast('Cloud load: no data to apply (check console)', 'incorrect', 2200);
         }
     } catch (e) {
-        console.warn('Cloud load error:', e);
+        console.warn('[PokerCrusher] Cloud load error:', e);
         showToast('Cloud load failed', 'incorrect', 2200);
     }
 }
