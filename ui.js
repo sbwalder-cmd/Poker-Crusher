@@ -1619,7 +1619,7 @@ function showDrilldown(title, contentFn) {
 function hideDrilldown() { document.getElementById('drilldown-panel').classList.add('hidden'); }
 
 function drilldownScenario(sc) {
-    const SCENARIO_LABELS = { RFI: 'RFI (Unopened)', FACING_RFI: 'Defending vs RFI', RFI_VS_3BET: 'vs 3-Bet', VS_LIMP: 'Vs Limpers (1–3+)', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C' };
+    const SCENARIO_LABELS = { RFI: 'RFI (Unopened)', FACING_RFI: 'Defending vs RFI', RFI_VS_3BET: 'vs 3-Bet', VS_LIMP: 'Vs Limpers (1–3+)', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push / Fold', POSTFLOP_CBET: 'Flop C-Bet' };
 
     // Daily Run meta (UI only)
     const drm = loadDailyRunMeta();
@@ -1638,9 +1638,12 @@ function drilldownScenario(sc) {
     const drmLastOpt = drm.lastOption || null;
     const drmLastOptName = drmLastOpt === 'easy' ? 'Warm‑Up' : drmLastOpt === 'hard' ? 'Boss' : drmLastOpt === 'medium' ? 'Grind' : null;
     const drmLastLeak = drm.lastLeakKey ? prettySpotName(drm.lastLeakKey) : null;
-    showDrilldown(SCENARIO_LABELS[sc], (content) => {
+    showDrilldown(SCENARIO_LABELS[sc] || sc, (content) => {
         // Find all spots for this scenario
-        const spots = Object.keys(state.global.bySpot).filter(k => k.startsWith(sc + '|'));
+        // Postflop spots use SRP|/3BP|/LIMP_POT| prefixes rather than POSTFLOP_CBET|
+        const spots = sc === 'POSTFLOP_CBET'
+            ? Object.keys(state.global.bySpot).filter(k => typeof POSTFLOP_KEY_PREFIX_LIST !== 'undefined' && POSTFLOP_KEY_PREFIX_LIST.some(p => k.startsWith(p + '|')))
+            : Object.keys(state.global.bySpot).filter(k => k.startsWith(sc + '|'));
         if (spots.length === 0) {
             content.innerHTML = '<p class="text-slate-600 text-sm">No data yet. Play some hands in this scenario.</p>';
             return;
