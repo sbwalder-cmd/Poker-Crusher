@@ -156,22 +156,8 @@ function getDailyRunScenarioPool(option) {
     return configured.filter(s => supported.has(s));
 }
 
-function installDailyRunExitPatch() {
-    if (window.__dailyRunExitPatchInstalled) return;
-    if (typeof window.exitToMenu !== 'function') {
-        setTimeout(installDailyRunExitPatch, 0);
-        return;
-    }
-    const original = window.exitToMenu;
-    window.exitToMenu = function() {
-        const shouldReset = !!(dailyRunState && (dailyRunState.active || dailyRunState.ended || dailyRunState._savedConfig));
-        const result = original.apply(this, arguments);
-        if (shouldReset) resetDailyRunState({ restoreConfig: true });
-        return result;
-    };
-    window.__dailyRunExitPatchInstalled = true;
-}
-setTimeout(installDailyRunExitPatch, 0);
+// Daily Run cleanup is handled natively inside exitToMenu (see ui.js).
+// No runtime monkey-patching needed.
 
 function loadDailyRunMeta() {
     const defaults = {
@@ -463,8 +449,9 @@ function startDailyRun(option) {
     hideAllScreens();
     document.getElementById('trainer-screen').classList.remove('hidden');
 
-    const _drFelt = document.getElementById('poker-felt-container');
-    if (_drFelt) { try { ro.observe(_drFelt); } catch(_) {} }
+    // Start the layout observer for this trainer entry path (Daily Run was previously
+    // missing this call because ro is scoped to the ResizeObserver IIFE in ui.js).
+    if (typeof window._trainerLayoutBoot === 'function') window._trainerLayoutBoot();
 
     applyDailyRunHUDState(true);
     updateUI();
