@@ -2202,7 +2202,7 @@ function handlePostflopInput(action){
         if (result.correct) dailyRunState.bySpot[_drSpotKey].correct++;
     }
 
-    const logEntry={ scenario:sc, pos:spot.heroPos, oppPos:spot.villainPos, hand:flopStr(spot.flopCards), action, correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), correct:result.correct, spotKey:spot.spotKey, archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback };
+    const logEntry={ scenario:sc, pos:spot.heroPos, oppPos:spot.villainPos, hand:flopStr(spot.flopCards), action, correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), correct:result.correct, spotKey:spot.spotKey, archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback, flopCards:spot.flopCards, strategy:spot.strategy, grade:result.grade, freqPct:result.freqPct, reasoning:result.reasoning };
     state.sessionLog.unshift(logEntry);
 
     if(result.correct){
@@ -2234,13 +2234,15 @@ function showPostflopFeedback(spot,result){
     let modal=document.getElementById('postflop-feedback-modal');
     if(!modal){ modal=document.createElement('div'); modal.id='postflop-feedback-modal'; modal.className='fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6'; modal.onclick=e=>{if(e.target===modal) closePostflopFeedback();}; document.body.appendChild(modal); }
     const archLabel=ARCHETYPE_LABELS[spot.boardArchetype]||spot.boardArchetype;
-    const betFreq=Math.round((spot.strategy.actions.bet33||0)*100); const checkFreq=Math.round((spot.strategy.actions.check||0)*100);
+    const actions = (spot.strategy && spot.strategy.actions) || {};
+    const betFreq=Math.round((actions.bet33||0)*100); const checkFreq=Math.round((actions.check||0)*100);
+    const flopHtml = (spot.flopCards && spot.flopCards.length) ? _flopCardsHtml(spot.flopCards) : '<span class="text-slate-500">—</span>';
     modal.innerHTML=`<div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl">
         <div class="flex items-center justify-between mb-3"><div class="text-xs font-black uppercase tracking-widest text-slate-400">${POS_LABELS[spot.heroPos]} vs ${POS_LABELS[spot.villainPos]} · ${spot.positionState}</div><button onclick="closePostflopFeedback()" class="text-slate-500 hover:text-white text-lg font-bold">✕</button></div>
-        <div class="text-sm font-bold text-slate-200 mb-2">${_flopCardsHtml(spot.flopCards)} <span class="text-slate-500 text-xs">(${archLabel})</span></div>
+        <div class="text-sm font-bold text-slate-200 mb-2">${flopHtml} <span class="text-slate-500 text-xs">(${archLabel})</span></div>
         <div class="flex gap-2 items-center mb-3"><div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden"><div class="h-full bg-orange-500 rounded-full" style="width:${betFreq}%"></div></div><div class="text-xs font-black text-orange-400 w-12 text-right">C-Bet ${betFreq}%</div></div>
         <div class="flex gap-2 items-center mb-4"><div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden"><div class="h-full bg-slate-500 rounded-full" style="width:${checkFreq}%"></div></div><div class="text-xs font-black text-slate-400 w-12 text-right">Check ${checkFreq}%</div></div>
-        <div class="text-xs text-slate-400 leading-relaxed">${result.reasoning}</div></div>`;
+        <div class="text-xs text-slate-400 leading-relaxed">${result.reasoning || result.feedback || ''}</div></div>`;
     modal.classList.remove('hidden');
 }
 function closePostflopFeedback(){ const m=document.getElementById('postflop-feedback-modal'); if(m) m.classList.add('hidden'); }
