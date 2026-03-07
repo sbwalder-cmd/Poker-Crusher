@@ -406,31 +406,10 @@ function buildTrainerPayloadForSync() {
 
 
 function applyTrainerPayload(payload) {
-    // Accept current and legacy payload shapes
-    let normalized = payload;
-
-    if (!normalized || typeof normalized !== 'object') {
+    if (!payload || typeof payload !== 'object' || !payload.data || typeof payload.data !== 'object') {
         showToast('Cloud load failed (bad data)', 'incorrect', 2000);
         return false;
     }
-
-    // Legacy wrapper: { data: { app, exportVersion, profile, data: {...} }, updatedAt }
-    if (
-        normalized.data &&
-        typeof normalized.data === 'object' &&
-        normalized.data.data &&
-        typeof normalized.data.data === 'object'
-    ) {
-        normalized = normalized.data;
-    }
-
-    // Current expected shape: { app, exportVersion, profile, data: {...} }
-    if (!normalized.data || typeof normalized.data !== 'object') {
-        showToast('Cloud load failed (bad data)', 'incorrect', 2000);
-        return false;
-    }
-
-    payload = normalized;
 
     // Switch profile if payload specifies one.
     // IMPORTANT: Guest is stored as '' (empty). Do not create a literal "guest" namespace by accident.
@@ -513,7 +492,7 @@ async function cloudLoadNow() {
             showToast('No cloud data found for that username', 'incorrect', 2200);
             return;
         }
-        const payload = result.data || result;
+        const payload = result;
         const ok = applyTrainerPayload(payload);
         if (ok) {
             showToast('Loaded from cloud (reloading)', 'correct', 1400);
