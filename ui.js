@@ -1178,6 +1178,7 @@ function switchChartBucket(bucket) {
 let _toastTimer = null;
 function showToast(text, type, duration) {
     const container = document.getElementById('toast-container');
+    if (!container) { console.warn('[Toast] Missing #toast-container:', text); return; }
     // Clear any existing toast
     if (_toastTimer) clearTimeout(_toastTimer);
     container.innerHTML = '';
@@ -1199,7 +1200,7 @@ function showToast(text, type, duration) {
 function clearToast() {
     const container = document.getElementById('toast-container');
     if (_toastTimer) clearTimeout(_toastTimer);
-    container.innerHTML = '';
+    if (container) container.innerHTML = '';
 }
 
 function showConfigMenu() { document.getElementById('config-screen').classList.remove('hidden'); hydrateCloudUI(); hydrateCloudAutoUI(); setDrillMode(drillState.mode); updateConfigUI(); }
