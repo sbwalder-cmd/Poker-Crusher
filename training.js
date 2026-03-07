@@ -1376,6 +1376,10 @@ function switchLibBucket(spotIdx, pos, opp, bucket) {
 // --- TRAINER LOGIC ---
 
 function generateNextRound() {
+    // Phase 1: clear per-round state objects immediately to prevent stale bleed
+    state._spotContext = null;
+    state._handState = null;
+
     // FIX Bug D: reset per-round so guard doesn't saturate across the session
     if (dailyRunState && dailyRunState.active) dailyRunState._rerollGuard = 0;
 
@@ -1723,15 +1727,29 @@ function generateNextRound() {
         state.currentHand = EdgeWeight.sampleHand(state.scenario, state.currentPos,
             state.scenario === 'VS_LIMP' ? state.oppPos + '|' + state.limperBucket : state.oppPos,
             srDb, missBoostData);
-        // Track for variety guard
-        const oppSuffix = state.scenario === 'VS_LIMP' ? '_Limp' : '';
-        let curSRKey;
-        if (state.scenario === 'SQUEEZE' || state.scenario === 'SQUEEZE_2C') curSRKey = `${state.scenario}|${state.oppPos}|${state.currentHand}`;
-        else if (state.scenario === 'VS_LIMP') curSRKey = `${state.scenario}|${state.currentPos}_vs_${state.oppPos}_Limp|${state.limperBucket}|${state.currentHand}`;
-        else if (state.scenario === 'PUSH_FOLD') curSRKey = `${state.scenario}|${state.currentPos}|${state.stackBB}BB|${state.currentHand}`;
-        else curSRKey = `${state.scenario}|${state.currentPos}${state.oppPos ? '_vs_' + state.oppPos + oppSuffix : ''}|${state.currentHand}`;
+        // Track for variety guard — use canonical buildSRKey
+        const curSRKey = buildSRKey(state.scenario, state.currentPos, state.oppPos, state.limperBucket, state.stackBB, state.currentHand);
         state.recentHandKeys.push(curSRKey);
         if (state.recentHandKeys.length > 10) state.recentHandKeys = state.recentHandKeys.slice(-10);
+    }
+
+    // Phase 1: build SpotContext and HandState for this round
+    state._spotContext = null;
+    state._handState = null;
+    try {
+        state._spotContext = buildSpotContext(
+            state.scenario, state.currentPos, state.oppPos,
+            state.limperBucket, state.limperPositions, state.stackBB,
+            state.squeezeOpener, state.squeezeCaller, state.squeezeCaller2
+        );
+        state._handState = buildHandState(
+            state.currentHand, state.scenario, state.currentPos, state.oppPos,
+            state.limperBucket, state.stackBB
+        );
+    } catch (e) {
+        console.warn('[Phase1] SpotContext/HandState build failed; fallback active', e);
+        state._spotContext = null;
+        state._handState = null;
     }
 
     // Immediately show card backs and dimmed buttons so layout is stable
@@ -1784,38 +1802,45 @@ function handleInput(action) {
     const grid = document.querySelector('#action-buttons > div');
     if (grid) { grid.classList.remove('action-buttons-revealed'); grid.classList.add('action-buttons-hidden'); }
 
+    // Phase 1: use HandState.correctAction as fast-path if available and valid.
+    // Full independent recomputation is retained as the fallback truth.
     let correctAction;
-    if (state.scenario === 'RFI') {
-        correctAction = checkRangeHelper(state.currentHand, rfiRanges[state.currentPos]) ? 'RAISE' : 'FOLD';
-    } else if (state.scenario === 'FACING_RFI') {
-        const data = facingRfiRanges[`${state.currentPos}_vs_${state.oppPos}`];
-        if (checkRangeHelper(state.currentHand, data["3-bet"])) correctAction = "3BET";
-        else if (data["Call"].length > 0 && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
-        else correctAction = "FOLD";
-    } else if (state.scenario === 'VS_LIMP') {
-        const data = getLimpDataForBucket(state.currentPos, state.oppPos, state.limperBucket) || allFacingLimps[`${state.currentPos}_vs_${state.oppPos}_Limp`];
-        if (checkRangeHelper(state.currentHand, getLimpRaise(data))) correctAction = "ISO";
-        else if (isLimpBBSpot(data)) correctAction = "OVERLIMP"; // BB can't fold
-        else if (checkRangeHelper(state.currentHand, getLimpPassive(data))) correctAction = "OVERLIMP";
-        else correctAction = "FOLD";
-    } else if (state.scenario === 'SQUEEZE') {
-        const data = squeezeRanges[state.oppPos];
-        if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
-        else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
-        else correctAction = "FOLD";
-    } else if (state.scenario === 'SQUEEZE_2C') {
-        const data = squeezeVsRfiTwoCallers[state.oppPos];
-        if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
-        else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
-        else correctAction = "FOLD";
-    } else if (state.scenario === 'PUSH_FOLD') {
-        const pfRange = PF_PUSH[state.stackBB] && PF_PUSH[state.stackBB][state.currentPos];
-        correctAction = (pfRange && checkRangeHelper(state.currentHand, pfRange)) ? 'SHOVE' : 'FOLD';
+    if (state._handState && state._handState.hand === state.currentHand) {
+        correctAction = state._handState.correctAction;
     } else {
-        const data = rfiVs3BetRanges[`${state.currentPos}_vs_${state.oppPos}`];
-        if (checkRangeHelper(state.currentHand, data["4-bet"])) correctAction = "4BET";
-        else if (checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
-        else correctAction = "FOLD";
+        // Full fallback — existing correctness computation, unchanged
+        if (state.scenario === 'RFI') {
+            correctAction = checkRangeHelper(state.currentHand, rfiRanges[state.currentPos]) ? 'RAISE' : 'FOLD';
+        } else if (state.scenario === 'FACING_RFI') {
+            const data = facingRfiRanges[`${state.currentPos}_vs_${state.oppPos}`];
+            if (checkRangeHelper(state.currentHand, data["3-bet"])) correctAction = "3BET";
+            else if (data["Call"].length > 0 && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+            else correctAction = "FOLD";
+        } else if (state.scenario === 'VS_LIMP') {
+            const data = getLimpDataForBucket(state.currentPos, state.oppPos, state.limperBucket) || allFacingLimps[`${state.currentPos}_vs_${state.oppPos}_Limp`];
+            if (checkRangeHelper(state.currentHand, getLimpRaise(data))) correctAction = "ISO";
+            else if (isLimpBBSpot(data)) correctAction = "OVERLIMP"; // BB can't fold
+            else if (checkRangeHelper(state.currentHand, getLimpPassive(data))) correctAction = "OVERLIMP";
+            else correctAction = "FOLD";
+        } else if (state.scenario === 'SQUEEZE') {
+            const data = squeezeRanges[state.oppPos];
+            if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
+            else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+            else correctAction = "FOLD";
+        } else if (state.scenario === 'SQUEEZE_2C') {
+            const data = squeezeVsRfiTwoCallers[state.oppPos];
+            if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
+            else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+            else correctAction = "FOLD";
+        } else if (state.scenario === 'PUSH_FOLD') {
+            const pfRange = PF_PUSH[state.stackBB] && PF_PUSH[state.stackBB][state.currentPos];
+            correctAction = (pfRange && checkRangeHelper(state.currentHand, pfRange)) ? 'SHOVE' : 'FOLD';
+        } else {
+            const data = rfiVs3BetRanges[`${state.currentPos}_vs_${state.oppPos}`];
+            if (checkRangeHelper(state.currentHand, data["4-bet"])) correctAction = "4BET";
+            else if (checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+            else correctAction = "FOLD";
+        }
     }
 
     const correct = action === correctAction;
@@ -1824,7 +1849,10 @@ function handleInput(action) {
     // Track per-scenario stats
     const sc = state.scenario;
     const hp = state.currentPos;
-    const spotKey = sc === 'RFI' ? `${sc}|${hp}` : sc === 'VS_LIMP' ? `${sc}|${hp}_vs_${state.oppPos}_Limp|${state.limperBucket}` : (sc === 'SQUEEZE' || sc === 'SQUEEZE_2C') ? `${sc}|${state.oppPos}` : sc === 'PUSH_FOLD' ? `${sc}|${hp}|${state.stackBB}BB` : `${sc}|${hp}_vs_${state.oppPos}`;
+    // Phase 1: use SpotContext.spotKey with fallback to buildSpotKey
+    const spotKey = (state._spotContext && state._spotContext.heroPos === hp && state._spotContext.scenario === sc)
+        ? state._spotContext.spotKey
+        : buildSpotKey(sc, hp, state.oppPos, state.limperBucket, state.stackBB);
 
 
     // Daily Run tracking (UI wrapper only — does not affect SR or core stats)
@@ -1882,14 +1910,14 @@ function handleInput(action) {
         _isBluff = isSqueezeBluff(state.currentHand, sqData);
     }
 
-    // Session log entry
-    const logEntry = {
-        hand: state.currentHand, pos: hp, oppPos: state.oppPos,
-        scenario: sc, action: action, correctAction: correctAction,
-        correct: correct, spotKey: spotKey, isBluff: _isBluff,
-        limperBucket: state.limperBucket, limperPositions: state.limperPositions ? [...state.limperPositions] : []
-    };
-    if (!logEntry.spotKey) logEntry.spotKey = spotKey;
+    // Phase 1: build DecisionNode for session log (with fallback shim for HandState)
+    const _hs = (state._handState && state._handState.hand === state.currentHand)
+        ? state._handState
+        : { hand: state.currentHand, correctAction: correctAction, srKey: handSRKey, spotKey: spotKey, edgeCategory: 'NORMAL' };
+    const _sc = (state._spotContext && state._spotContext.scenario === sc)
+        ? state._spotContext
+        : { scenario: sc, heroPos: hp, oppPos: state.oppPos, limperBucket: state.limperBucket, limperPositions: state.limperPositions ? [...state.limperPositions] : [], spotKey: spotKey };
+    const logEntry = buildDecisionNode(_sc, _hs, action, correct, { isBluff: _isBluff });
     state.sessionLog.unshift(logEntry); // newest first
     
     if (correct) {
@@ -2033,7 +2061,7 @@ function handlePostflopInput(action){
 
     // Stats
     postflopStats.total++; state.sessionStats.total++; state.global.totalHands++;
-    const srKey=`${spot.spotKey}|${spot.boardArchetype}`;
+    const srKey=buildPostflopSRKey(spot.spotKey, spot.boardArchetype);
     SR.update(srKey, result.correct?'Good':'Again');
     if(!postflopStats.byArchetype[spot.boardArchetype]) postflopStats.byArchetype[spot.boardArchetype]={total:0,correct:0};
     postflopStats.byArchetype[spot.boardArchetype].total++;
@@ -2049,7 +2077,12 @@ function handlePostflopInput(action){
     if(!state.global.bySpot[spot.spotKey]) state.global.bySpot[spot.spotKey]={total:0,correct:0};
     state.global.bySpot[spot.spotKey].total++;
 
-    const logEntry={ scenario:sc, pos:spot.heroPos, oppPos:spot.villainPos, hand:flopStr(spot.flopCards), action, correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), correct:result.correct, spotKey:spot.spotKey, archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback };
+    const logEntry=buildDecisionNode(
+        { scenario:sc, heroPos:spot.heroPos, oppPos:spot.villainPos, limperBucket:'1L', limperPositions:[], spotKey:spot.spotKey },
+        { hand:flopStr(spot.flopCards), correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), srKey:srKey, spotKey:spot.spotKey, edgeCategory:'NORMAL' },
+        action, result.correct,
+        { archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback }
+    );
     state.sessionLog.unshift(logEntry);
 
     if(result.correct){
