@@ -1376,10 +1376,6 @@ function switchLibBucket(spotIdx, pos, opp, bucket) {
 // --- TRAINER LOGIC ---
 
 function generateNextRound() {
-    // Phase 1: clear per-round state objects immediately to prevent stale bleed
-    state._spotContext = null;
-    state._handState = null;
-
     // FIX Bug D: reset per-round so guard doesn't saturate across the session
     if (dailyRunState && dailyRunState.active) dailyRunState._rerollGuard = 0;
 
@@ -1726,13 +1722,18 @@ function generateNextRound() {
             flopInfoEl.innerHTML = infoHtml;
             flopInfoEl.classList.remove('hidden');
         }
-        // Render community cards on felt
-        renderCommunityCards(state.postflop.flopCards);
-        // Clear preflop card backs layer (no longer needed on flop)
-        const cl = document.getElementById('cards-layer'); if (cl) cl.innerHTML = '';
 
-        // Place preflop bets on the table to show the pot going to the flop.
-        // SRP: hero raised, villain called, SB folded (dead $1).
+        // Render community cards on felt.
+        renderCommunityCards(state.postflop.flopCards);
+
+        // updateTable() clears both cards-layer and bets-layer, so run it first.
+        try { updateTable(state.postflop.heroPos, state.postflop.villainPos); } catch(_) {}
+
+        // Remove seat card-backs for the settled flop scene.
+        const cl = document.getElementById('cards-layer');
+        if (cl) cl.innerHTML = '';
+
+        // Rebuild the visible preflop money after updateTable() has finished clearing layers.
         const bl = document.getElementById('bets-layer');
         if (bl) {
             bl.innerHTML = '';
@@ -1740,11 +1741,12 @@ function generateNextRound() {
                 const heroCoords = getSeatCoords(spot.heroPos, spot.heroPos);
                 const villCoords = getSeatCoords(spot.heroPos, spot.villainPos);
                 const openBB = getOpenSizeBB();
-                // Hero's preflop raise
+
+                // Hero open and villain flat-call.
                 if (heroCoords) animateChip(bl, heroCoords, openBB);
-                // Villain's preflop call
                 if (villCoords) animateChip(bl, villCoords, openBB);
-                // SB dead money (if SB isn't hero or villain)
+
+                // Dead small blind money when SB is not one of the active players.
                 if (spot.heroPos !== 'SB' && spot.villainPos !== 'SB') {
                     const sbCoords = getSeatCoords(spot.heroPos, 'SB');
                     if (sbCoords) animateChip(bl, sbCoords, 0.5, '$1');
@@ -1752,15 +1754,6 @@ function generateNextRound() {
             } catch(_) {}
         }
 
-        // Show pot size in the sizing hint line
-        try {
-            const open$ = getOpenSize$();
-            const pot$ = open$ * 2 + 1; // hero raise + villain call + SB dead $1
-            setSizingHint(`Pot: ${fmt$(pot$)}`);
-        } catch(_) {}
-
-        // Update table seats
-        try { updateTable(state.postflop.heroPos, state.postflop.villainPos); } catch(_) {}
         // Render postflop buttons (hidden, then reveal)
         renderPostflopButtons(true);
         setTimeout(() => renderPostflopButtons(false), 300);
@@ -1780,29 +1773,15 @@ function generateNextRound() {
         state.currentHand = EdgeWeight.sampleHand(state.scenario, state.currentPos,
             state.scenario === 'VS_LIMP' ? state.oppPos + '|' + state.limperBucket : state.oppPos,
             srDb, missBoostData);
-        // Track for variety guard — use canonical buildSRKey
-        const curSRKey = buildSRKey(state.scenario, state.currentPos, state.oppPos, state.limperBucket, state.stackBB, state.currentHand);
+        // Track for variety guard
+        const oppSuffix = state.scenario === 'VS_LIMP' ? '_Limp' : '';
+        let curSRKey;
+        if (state.scenario === 'SQUEEZE' || state.scenario === 'SQUEEZE_2C') curSRKey = `${state.scenario}|${state.oppPos}|${state.currentHand}`;
+        else if (state.scenario === 'VS_LIMP') curSRKey = `${state.scenario}|${state.currentPos}_vs_${state.oppPos}_Limp|${state.limperBucket}|${state.currentHand}`;
+        else if (state.scenario === 'PUSH_FOLD') curSRKey = `${state.scenario}|${state.currentPos}|${state.stackBB}BB|${state.currentHand}`;
+        else curSRKey = `${state.scenario}|${state.currentPos}${state.oppPos ? '_vs_' + state.oppPos + oppSuffix : ''}|${state.currentHand}`;
         state.recentHandKeys.push(curSRKey);
         if (state.recentHandKeys.length > 10) state.recentHandKeys = state.recentHandKeys.slice(-10);
-    }
-
-    // Phase 1: build SpotContext and HandState for this round
-    state._spotContext = null;
-    state._handState = null;
-    try {
-        state._spotContext = buildSpotContext(
-            state.scenario, state.currentPos, state.oppPos,
-            state.limperBucket, state.limperPositions, state.stackBB,
-            state.squeezeOpener, state.squeezeCaller, state.squeezeCaller2
-        );
-        state._handState = buildHandState(
-            state.currentHand, state.scenario, state.currentPos, state.oppPos,
-            state.limperBucket, state.stackBB
-        );
-    } catch (e) {
-        console.warn('[Phase1] SpotContext/HandState build failed; fallback active', e);
-        state._spotContext = null;
-        state._handState = null;
     }
 
     // Immediately show card backs and dimmed buttons so layout is stable
@@ -1855,45 +1834,38 @@ function handleInput(action) {
     const grid = document.querySelector('#action-buttons > div');
     if (grid) { grid.classList.remove('action-buttons-revealed'); grid.classList.add('action-buttons-hidden'); }
 
-    // Phase 1: use HandState.correctAction as fast-path if available and valid.
-    // Full independent recomputation is retained as the fallback truth.
     let correctAction;
-    if (state._handState && state._handState.hand === state.currentHand) {
-        correctAction = state._handState.correctAction;
+    if (state.scenario === 'RFI') {
+        correctAction = checkRangeHelper(state.currentHand, rfiRanges[state.currentPos]) ? 'RAISE' : 'FOLD';
+    } else if (state.scenario === 'FACING_RFI') {
+        const data = facingRfiRanges[`${state.currentPos}_vs_${state.oppPos}`];
+        if (checkRangeHelper(state.currentHand, data["3-bet"])) correctAction = "3BET";
+        else if (data["Call"].length > 0 && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+        else correctAction = "FOLD";
+    } else if (state.scenario === 'VS_LIMP') {
+        const data = getLimpDataForBucket(state.currentPos, state.oppPos, state.limperBucket) || allFacingLimps[`${state.currentPos}_vs_${state.oppPos}_Limp`];
+        if (checkRangeHelper(state.currentHand, getLimpRaise(data))) correctAction = "ISO";
+        else if (isLimpBBSpot(data)) correctAction = "OVERLIMP"; // BB can't fold
+        else if (checkRangeHelper(state.currentHand, getLimpPassive(data))) correctAction = "OVERLIMP";
+        else correctAction = "FOLD";
+    } else if (state.scenario === 'SQUEEZE') {
+        const data = squeezeRanges[state.oppPos];
+        if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
+        else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+        else correctAction = "FOLD";
+    } else if (state.scenario === 'SQUEEZE_2C') {
+        const data = squeezeVsRfiTwoCallers[state.oppPos];
+        if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
+        else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+        else correctAction = "FOLD";
+    } else if (state.scenario === 'PUSH_FOLD') {
+        const pfRange = PF_PUSH[state.stackBB] && PF_PUSH[state.stackBB][state.currentPos];
+        correctAction = (pfRange && checkRangeHelper(state.currentHand, pfRange)) ? 'SHOVE' : 'FOLD';
     } else {
-        // Full fallback — existing correctness computation, unchanged
-        if (state.scenario === 'RFI') {
-            correctAction = checkRangeHelper(state.currentHand, rfiRanges[state.currentPos]) ? 'RAISE' : 'FOLD';
-        } else if (state.scenario === 'FACING_RFI') {
-            const data = facingRfiRanges[`${state.currentPos}_vs_${state.oppPos}`];
-            if (checkRangeHelper(state.currentHand, data["3-bet"])) correctAction = "3BET";
-            else if (data["Call"].length > 0 && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
-            else correctAction = "FOLD";
-        } else if (state.scenario === 'VS_LIMP') {
-            const data = getLimpDataForBucket(state.currentPos, state.oppPos, state.limperBucket) || allFacingLimps[`${state.currentPos}_vs_${state.oppPos}_Limp`];
-            if (checkRangeHelper(state.currentHand, getLimpRaise(data))) correctAction = "ISO";
-            else if (isLimpBBSpot(data)) correctAction = "OVERLIMP"; // BB can't fold
-            else if (checkRangeHelper(state.currentHand, getLimpPassive(data))) correctAction = "OVERLIMP";
-            else correctAction = "FOLD";
-        } else if (state.scenario === 'SQUEEZE') {
-            const data = squeezeRanges[state.oppPos];
-            if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
-            else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
-            else correctAction = "FOLD";
-        } else if (state.scenario === 'SQUEEZE_2C') {
-            const data = squeezeVsRfiTwoCallers[state.oppPos];
-            if (data && checkRangeHelper(state.currentHand, data["Squeeze"])) correctAction = "SQUEEZE";
-            else if (data && data["Call"] && checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
-            else correctAction = "FOLD";
-        } else if (state.scenario === 'PUSH_FOLD') {
-            const pfRange = PF_PUSH[state.stackBB] && PF_PUSH[state.stackBB][state.currentPos];
-            correctAction = (pfRange && checkRangeHelper(state.currentHand, pfRange)) ? 'SHOVE' : 'FOLD';
-        } else {
-            const data = rfiVs3BetRanges[`${state.currentPos}_vs_${state.oppPos}`];
-            if (checkRangeHelper(state.currentHand, data["4-bet"])) correctAction = "4BET";
-            else if (checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
-            else correctAction = "FOLD";
-        }
+        const data = rfiVs3BetRanges[`${state.currentPos}_vs_${state.oppPos}`];
+        if (checkRangeHelper(state.currentHand, data["4-bet"])) correctAction = "4BET";
+        else if (checkRangeHelper(state.currentHand, data["Call"])) correctAction = "CALL";
+        else correctAction = "FOLD";
     }
 
     const correct = action === correctAction;
@@ -1902,10 +1874,7 @@ function handleInput(action) {
     // Track per-scenario stats
     const sc = state.scenario;
     const hp = state.currentPos;
-    // Phase 1: use SpotContext.spotKey with fallback to buildSpotKey
-    const spotKey = (state._spotContext && state._spotContext.heroPos === hp && state._spotContext.scenario === sc)
-        ? state._spotContext.spotKey
-        : buildSpotKey(sc, hp, state.oppPos, state.limperBucket, state.stackBB);
+    const spotKey = sc === 'RFI' ? `${sc}|${hp}` : sc === 'VS_LIMP' ? `${sc}|${hp}_vs_${state.oppPos}_Limp|${state.limperBucket}` : (sc === 'SQUEEZE' || sc === 'SQUEEZE_2C') ? `${sc}|${state.oppPos}` : sc === 'PUSH_FOLD' ? `${sc}|${hp}|${state.stackBB}BB` : `${sc}|${hp}_vs_${state.oppPos}`;
 
 
     // Daily Run tracking (UI wrapper only — does not affect SR or core stats)
@@ -1963,14 +1932,14 @@ function handleInput(action) {
         _isBluff = isSqueezeBluff(state.currentHand, sqData);
     }
 
-    // Phase 1: build DecisionNode for session log (with fallback shim for HandState)
-    const _hs = (state._handState && state._handState.hand === state.currentHand)
-        ? state._handState
-        : { hand: state.currentHand, correctAction: correctAction, srKey: handSRKey, spotKey: spotKey, edgeCategory: 'NORMAL' };
-    const _sc = (state._spotContext && state._spotContext.scenario === sc)
-        ? state._spotContext
-        : { scenario: sc, heroPos: hp, oppPos: state.oppPos, limperBucket: state.limperBucket, limperPositions: state.limperPositions ? [...state.limperPositions] : [], spotKey: spotKey };
-    const logEntry = buildDecisionNode(_sc, _hs, action, correct, { isBluff: _isBluff });
+    // Session log entry
+    const logEntry = {
+        hand: state.currentHand, pos: hp, oppPos: state.oppPos,
+        scenario: sc, action: action, correctAction: correctAction,
+        correct: correct, spotKey: spotKey, isBluff: _isBluff,
+        limperBucket: state.limperBucket, limperPositions: state.limperPositions ? [...state.limperPositions] : []
+    };
+    if (!logEntry.spotKey) logEntry.spotKey = spotKey;
     state.sessionLog.unshift(logEntry); // newest first
     
     if (correct) {
@@ -2090,13 +2059,10 @@ function _flopCardsHtml(cards){ return cards.map(c => { const color=flopSuitColo
 
 function renderPostflopButtons(hidden){
     const container=document.getElementById('action-buttons');
-    // Show pot and c-bet sizing info
-    try {
-        const open$ = getOpenSize$();
-        const pot$ = open$ * 2 + 1; // hero raise + villain call + SB dead
-        const cbet$ = Math.round(pot$ * 0.33);
-        setSizingHint(`Pot: ${fmt$(pot$)} · C-Bet 33%: ${fmt$(cbet$)}`);
-    } catch(_) { setSizingHint(''); }
+    const open$ = getOpenSize$();
+    const pot$ = open$ * 2 + 1; // hero raise + BB call + SB dead money
+    const cbet$ = Math.max(1, Math.round(pot$ * 0.33));
+    setSizingHint(`Pot: ${fmt$(pot$)} · C-Bet 33%: ${fmt$(cbet$)}`);
     const sc=hidden?'action-buttons-hidden':'action-buttons-revealed';
     const bs=`style="padding:var(--btn-pad, 14px) 0;font-size:var(--btn-font, 14px);"`;
     container.innerHTML=`<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handlePostflopInput('CHECK')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">CHECK</button><button onclick="handlePostflopInput('CBET')" ${bs} class="bg-orange-600 rounded-2xl font-black text-white shadow-lg">C-BET</button></div>`;
@@ -2116,14 +2082,11 @@ function handlePostflopInput(action){
     if(grid){ grid.classList.remove('action-buttons-revealed'); grid.classList.add('action-buttons-hidden'); }
     const spot=state.postflop;
     if(!spot||!spot.strategy){ __endResolve(); return; }
-    const result=scorePostflopAction(action,spot.strategy,spot);
+    const result=scorePostflopAction(action,spot.strategy);
 
     // Stats
     postflopStats.total++; state.sessionStats.total++; state.global.totalHands++;
-    // Phase 2: SR key includes hand class for hero-hand-aware spots
-    const srKeyBase = spot.heroHandClass ? spot.spotKey : spot.spotKey;
-    const srKeySuffix = spot.heroHandClass ? spot.heroHand.handKey : spot.boardArchetype;
-    const srKey=buildPostflopSRKey(srKeyBase, srKeySuffix);
+    const srKey=`${spot.spotKey}|${spot.boardArchetype}`;
     SR.update(srKey, result.correct?'Good':'Again');
     if(!postflopStats.byArchetype[spot.boardArchetype]) postflopStats.byArchetype[spot.boardArchetype]={total:0,correct:0};
     postflopStats.byArchetype[spot.boardArchetype].total++;
@@ -2139,12 +2102,7 @@ function handlePostflopInput(action){
     if(!state.global.bySpot[spot.spotKey]) state.global.bySpot[spot.spotKey]={total:0,correct:0};
     state.global.bySpot[spot.spotKey].total++;
 
-    const logEntry=buildDecisionNode(
-        { scenario:sc, heroPos:spot.heroPos, oppPos:spot.villainPos, limperBucket:'1L', limperPositions:[], spotKey:spot.spotKey },
-        { hand: spot.heroHand ? spot.heroHand.handKey : flopStr(spot.flopCards), correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), srKey:srKey, spotKey:spot.spotKey, edgeCategory:'NORMAL' },
-        action, result.correct,
-        { archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback, heroHandClass:spot.heroHandClass||null, flopCards:flopStr(spot.flopCards) }
-    );
+    const logEntry={ scenario:sc, pos:spot.heroPos, oppPos:spot.villainPos, hand:flopStr(spot.flopCards), action, correctAction:result.correct?action:(action==='CBET'?'CHECK':'CBET'), correct:result.correct, spotKey:spot.spotKey, archetype:spot.boardArchetype, positionState:spot.positionState, feedback:result.feedback };
     state.sessionLog.unshift(logEntry);
 
     if(result.correct){
@@ -2174,12 +2132,9 @@ function showPostflopFeedback(spot,result){
     if(!modal){ modal=document.createElement('div'); modal.id='postflop-feedback-modal'; modal.className='fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6'; modal.onclick=e=>{if(e.target===modal) closePostflopFeedback();}; document.body.appendChild(modal); }
     const archLabel=ARCHETYPE_LABELS[spot.boardArchetype]||spot.boardArchetype;
     const betFreq=Math.round((spot.strategy.actions.bet33||0)*100); const checkFreq=Math.round((spot.strategy.actions.check||0)*100);
-    const handClassLine = spot.heroHandClass ? `<div class="text-[11px] font-black text-indigo-400 mb-2">${(typeof HAND_CLASS_LABELS!=='undefined'&&HAND_CLASS_LABELS[spot.heroHandClass])||spot.heroHandClass}</div>` : '';
-    const heroHandLine = spot.heroHand ? `<span class="text-white text-xs font-bold ml-2">${spot.heroHand.handKey}</span>` : '';
     modal.innerHTML=`<div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl">
         <div class="flex items-center justify-between mb-3"><div class="text-xs font-black uppercase tracking-widest text-slate-400">${POS_LABELS[spot.heroPos]} vs ${POS_LABELS[spot.villainPos]} · ${spot.positionState}</div><button onclick="closePostflopFeedback()" class="text-slate-500 hover:text-white text-lg font-bold">✕</button></div>
-        <div class="text-sm font-bold text-slate-200 mb-2">${_flopCardsHtml(spot.flopCards)} <span class="text-slate-500 text-xs">(${archLabel})</span>${heroHandLine}</div>
-        ${handClassLine}
+        <div class="text-sm font-bold text-slate-200 mb-2">${_flopCardsHtml(spot.flopCards)} <span class="text-slate-500 text-xs">(${archLabel})</span></div>
         <div class="flex gap-2 items-center mb-3"><div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden"><div class="h-full bg-orange-500 rounded-full" style="width:${betFreq}%"></div></div><div class="text-xs font-black text-orange-400 w-12 text-right">C-Bet ${betFreq}%</div></div>
         <div class="flex gap-2 items-center mb-4"><div class="flex-1 bg-slate-800 rounded-full h-3 overflow-hidden"><div class="h-full bg-slate-500 rounded-full" style="width:${checkFreq}%"></div></div><div class="text-xs font-black text-slate-400 w-12 text-right">Check ${checkFreq}%</div></div>
         <div class="text-xs text-slate-400 leading-relaxed">${result.reasoning}</div></div>`;
