@@ -927,10 +927,17 @@ function revealButtons() {
 // This comment block preserves the location for reference.
 
 // Store chart context so bucket toggle can re-render
-let _chartCtx = { pos: null, target: null, scenario: null, oppPos: null };
+// _chartCtx.bucket is the chart-LOCAL bucket — never written back to state.limperBucket.
+let _chartCtx = { pos: null, target: null, scenario: null, oppPos: null, bucket: '1L' };
 
-function showChart(pos, target, scenario, oppPos) {
-    _chartCtx = { pos, target, scenario, oppPos };
+function showChart(pos, target, scenario, oppPos, bucketOverride) {
+    // Snapshot the correct bucket for chart display at open-time.
+    // bucketOverride is provided by library/log-row callers that must not touch state.
+    // For in-training mistake charts, state.limperBucket is correct at this moment.
+    const chartBucket = bucketOverride != null
+        ? bucketOverride
+        : (scenario === 'VS_LIMP' ? (state.limperBucket || '1L') : '1L');
+    _chartCtx = { pos, target, scenario, oppPos, bucket: chartBucket };
     _renderChart(pos, target, scenario, oppPos);
     document.getElementById('chart-modal').classList.remove('hidden');
 }
@@ -1055,7 +1062,7 @@ function _renderChart(pos, target, scenario, oppPos) {
     const whyEl = document.getElementById('chart-why-text');
     if (whyEl && target) {
         try {
-            const effOpp = (scenario === 'VS_LIMP') ? `${oppPos}|${state.limperBucket}` : oppPos;
+            const effOpp = (scenario === 'VS_LIMP') ? `${oppPos}|${_chartCtx.bucket}` : oppPos;
 const correctAction = EdgeWeight.getCorrectAction(target, scenario, pos, effOpp);
 const why = getWhyText(target, correctAction, scenario, pos, effOpp);
             if (why) {
@@ -1077,7 +1084,7 @@ const why = getWhyText(target, correctAction, scenario, pos, effOpp);
     if (scenario === 'RFI') {
         legendEl.innerHTML = `<div class="flex items-center gap-1.5"><div class="w-3 h-3 bg-indigo-600 rounded"></div><span>Raise</span></div>`;
     } else if (scenario === 'VS_LIMP') {
-        const lData = getLimpDataForBucket(pos, oppPos, state.limperBucket) || allFacingLimps[`${pos}_vs_${oppPos}_Limp`];
+        const lData = getLimpDataForBucket(pos, oppPos, _chartCtx.bucket) || allFacingLimps[`${pos}_vs_${oppPos}_Limp`];
         const isBB = lData && isLimpBBSpot(lData);
         const isBlinds = lData && isLimpBlindSpot(lData);
         const rLabel = isBlinds ? 'Raise' : 'Iso Raise';
@@ -1096,7 +1103,7 @@ const why = getWhyText(target, correctAction, scenario, pos, effOpp);
         const labels = { '1L': '1 Limper', '2L': '2 Limpers', '3P': '3+ Limpers' };
         bucketToggle.classList.remove('hidden');
         bucketToggle.innerHTML = buckets.map(b => {
-            const sel = b === state.limperBucket;
+            const sel = b === _chartCtx.bucket;
             return `<button onclick="switchChartBucket('${b}')" class="px-3 py-1 rounded-full text-[9px] font-bold transition-all ${sel ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${labels[b]}</button>`;
         }).join('');
     } else {
@@ -1116,7 +1123,7 @@ const why = getWhyText(target, correctAction, scenario, pos, effOpp);
                 if (checkRangeHelper(hKey, d["3-bet"])) bg = 'bg-indigo-600';
                 else if (checkRangeHelper(hKey, d["Call"])) bg = 'bg-emerald-600';
             } else if (scenario === 'VS_LIMP') {
-                const d = getLimpDataForBucket(pos, oppPos, state.limperBucket) || allFacingLimps[`${pos}_vs_${oppPos}_Limp`];
+                const d = getLimpDataForBucket(pos, oppPos, _chartCtx.bucket) || allFacingLimps[`${pos}_vs_${oppPos}_Limp`];
                 if (d && checkRangeHelper(hKey, getLimpRaise(d))) bg = 'bg-orange-600';
                 else if (d && checkRangeHelper(hKey, getLimpPassive(d))) bg = 'bg-cyan-700';
             } else if (scenario === 'SQUEEZE') {
@@ -1146,7 +1153,7 @@ const why = getWhyText(target, correctAction, scenario, pos, effOpp);
         const p = parseSqueeze2CKey(oppPos);
         document.getElementById('chart-pos-label').innerText = p ? `${POS_LABELS[p.hero]} vs ${POS_LABELS[p.opener]} open, ${POS_LABELS[p.caller1]} & ${POS_LABELS[p.caller2]} call` : '';
     } else if (scenario === 'VS_LIMP') {
-        const bucketTag = { '1L': '1 Limper', '2L': '2 Limpers', '3P': '3+ Limpers' }[state.limperBucket] || '';
+        const bucketTag = { '1L': '1 Limper', '2L': '2 Limpers', '3P': '3+ Limpers' }[_chartCtx.bucket] || '';
         document.getElementById('chart-pos-label').innerText = `${POS_LABELS[pos]} vs ${POS_LABELS[oppPos] || 'Field'} · ${bucketTag}`;
     } else {
         document.getElementById('chart-pos-label').innerText = `${POS_LABELS[pos]} vs ${POS_LABELS[oppPos] || 'Field'}`;
@@ -1154,7 +1161,10 @@ const why = getWhyText(target, correctAction, scenario, pos, effOpp);
 }
 
 function switchChartBucket(bucket) {
-    state.limperBucket = bucket;
+    // Chart-local only — must never write back to state.limperBucket.
+    // state.limperBucket belongs to the active training session and must not be
+    // changed by browsing the chart while a drill or challenge is running.
+    _chartCtx.bucket = bucket;
     _renderChart(_chartCtx.pos, _chartCtx.target, _chartCtx.scenario, _chartCtx.oppPos);
 }
 
@@ -1266,7 +1276,10 @@ function exitToMenu() {
         drillState._savedConfig = null;
     }
     drillState.active = false;
+    drillState.lockedLimperBucket = null;  // prevent bucket lock leaking into next session
     reviewSession.active = false;
+    // Ensure challenge mode flags are cleared so they can't contaminate the next session
+    if (typeof challengeState !== 'undefined') challengeState.active = false;
 
     if (wasOpenTraining && handsPlayed >= 5) {
         showSessionSummary();
@@ -1582,10 +1595,9 @@ function logRowChart(idx) {
         return;
     }
     _chartIsReview = true;
-    // Restore limper bucket for chart
-    if (e.limperBucket) state.limperBucket = e.limperBucket;
+    // Pass limperBucket as a chart-local override — do NOT write state.limperBucket here.
     hideSessionLog();
-    showChart(e.pos, e.hand, e.scenario, e.oppPos);
+    showChart(e.pos, e.hand, e.scenario, e.oppPos, e.limperBucket || null);
 }
 
 // --- STATS DRILL-DOWN ---
