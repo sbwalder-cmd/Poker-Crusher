@@ -1252,13 +1252,9 @@ function hideLibrary() {
     document.getElementById('library-screen').classList.add('hidden');
 }
 
-function setLibCategory(cat) {
-    state.libCategory = cat;
-    renderLibrary();
-}
-
 // ── Library state ─────────────────────────────────────────────
-const libSel = { category: 'RFI', heroPos: null, oppPos: null, bucket: '1L' };
+const libSel = { category: 'RFI', heroPos: null, oppPos: null, bucket: '1L',
+    pfPosState: 'IP', pfFamily: 'BTN_vs_BB', pfView: 'Overview', pfArchetype: 'A_HIGH_DRY', pfSelectedHandClass: null };
 
 function setLibCategory(cat) {
     state.libCategory = cat;
@@ -1322,18 +1318,44 @@ function getLibSpots() {
 // ── Render toggle rows + chart area ───────────────────────────
 function renderLibrary() {
     const cat = libSel.category;
-    const spots = getLibSpots();
+    const isPostflop = cat === 'POSTFLOP';
 
     // Update category tab styles
-    ['RFI','FACING_RFI','RFI_VS_3BET','VS_LIMP','SQUEEZE','SQUEEZE_2C'].forEach(tab => {
+    ['RFI','FACING_RFI','RFI_VS_3BET','VS_LIMP','SQUEEZE','SQUEEZE_2C','POSTFLOP'].forEach(tab => {
         const btn = document.getElementById(`lib-tab-${tab}`);
         if (btn) btn.className = `whitespace-nowrap px-4 py-1.5 rounded-full font-bold text-xs ${cat === tab ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'}`;
     });
 
-    // Hero position row — unique heroes for this category
+    // Hide/show preflop vs postflop rows
     const heroRow = document.getElementById('lib-hero-row');
+    const oppRow = document.getElementById('lib-opp-row');
+    const bucketRow = document.getElementById('lib-bucket-row');
+    const pfPosRow = document.getElementById('lib-pf-posstate-row');
+    const pfFamRow = document.getElementById('lib-pf-family-row');
+    const pfViewRow = document.getElementById('lib-pf-view-row');
+
+    if (isPostflop) {
+        heroRow.classList.add('hidden');
+        oppRow.classList.add('hidden');
+        bucketRow.classList.add('hidden');
+        pfPosRow.classList.remove('hidden');
+        pfFamRow.classList.remove('hidden');
+        pfViewRow.classList.remove('hidden');
+        renderPostflopLibraryControls();
+        renderPostflopLibraryContent();
+        return;
+    }
+
+    // Preflop mode: hide postflop rows
+    pfPosRow.classList.add('hidden');
+    pfFamRow.classList.add('hidden');
+    pfViewRow.classList.add('hidden');
+    heroRow.classList.remove('hidden');
+
+    const spots = getLibSpots();
+
+    // Hero position row — unique heroes for this category
     const heroes = [...new Set(spots.map(s => s.hero))];
-    // Auto-select first hero if none set or current invalid
     if (!libSel.heroPos || !heroes.includes(libSel.heroPos)) libSel.heroPos = heroes[0] || null;
 
     heroRow.innerHTML = heroes.map(h => {
@@ -1342,7 +1364,6 @@ function renderLibrary() {
     }).join('');
 
     // Opponent row (hidden for RFI which has no opponent)
-    const oppRow = document.getElementById('lib-opp-row');
     if (cat === 'RFI') {
         oppRow.classList.add('hidden');
         libSel.oppPos = null;
@@ -1354,7 +1375,6 @@ function renderLibrary() {
 
         oppRow.innerHTML = opps.map(o => {
             const active = o === libSel.oppPos;
-            // For SQUEEZE/2C the opp is a full key; use the label
             const spot = heroSpots.find(s => s.opp === o);
             const label = spot && spot.label ? spot.label : (POS_LABELS[o] || o);
             return `<button onclick="setLibOpp('${o}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${label}</button>`;
@@ -1362,7 +1382,6 @@ function renderLibrary() {
     }
 
     // Bucket row (VS_LIMP only)
-    const bucketRow = document.getElementById('lib-bucket-row');
     if (cat === 'VS_LIMP') {
         bucketRow.classList.remove('hidden');
         bucketRow.innerHTML = [['1L','1 Limper'],['2L','2 Limpers'],['3P','3+ Limpers']].map(([b, lab]) => {
@@ -1376,11 +1395,484 @@ function renderLibrary() {
     renderLibraryChart();
 }
 
+// ═══════════════════════════════════════════════════════════════
+// POSTFLOP LIBRARY — Study surface inside Strategy Library
+// ═══════════════════════════════════════════════════════════════
+
+function setLibPostflopPosState(ps) {
+    libSel.pfPosState = ps;
+    // Auto-select first family for new position state
+    const fams = _getPostflopFamiliesForPosState(ps);
+    libSel.pfFamily = fams[0] || 'BTN_vs_BB';
+    libSel.pfView = 'Overview';
+    libSel.pfArchetype = 'A_HIGH_DRY';
+    libSel.pfSelectedHandClass = null;
+    renderLibrary();
+}
+
+function setLibPostflopFamily(fam) {
+    libSel.pfFamily = fam;
+    // If switching to non-V2 family and Matrix is active, fall back to Overview
+    if (libSel.pfView === 'Matrix' && !HERO_HAND_AWARE_FAMILIES.has(fam)) {
+        libSel.pfView = 'Overview';
+    }
+    libSel.pfSelectedHandClass = null;
+    renderLibrary();
+}
+
+function setLibPostflopView(v) {
+    if (v === 'Matrix' && !HERO_HAND_AWARE_FAMILIES.has(libSel.pfFamily)) return;
+    libSel.pfView = v;
+    libSel.pfSelectedHandClass = null;
+    renderLibrary();
+}
+
+function setLibPostflopArchetype(arch) {
+    libSel.pfArchetype = arch;
+    libSel.pfSelectedHandClass = null;
+    renderLibrary();
+}
+
+function _pfJumpToArchetype(arch) {
+    libSel.pfView = 'Archetypes';
+    libSel.pfArchetype = arch;
+    libSel.pfSelectedHandClass = null;
+    renderLibrary();
+}
+
+function setLibPostflopHandClass(hc) {
+    libSel.pfSelectedHandClass = libSel.pfSelectedHandClass === hc ? null : hc;
+    renderLibrary();
+}
+
+function _getPostflopFamiliesForPosState(ps) {
+    return Object.keys(POSTFLOP_PREFLOP_FAMILIES).filter(k => POSTFLOP_PREFLOP_FAMILIES[k].positionState === ps);
+}
+
+function _pfFamilyLabel(fam) {
+    const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+    if (!fi) return fam;
+    return `${POS_LABELS[fi.heroPos] || fi.heroPos} vs ${POS_LABELS[fi.villainPos] || fi.villainPos}`;
+}
+
+function _pfFreqBg(betPct) {
+    if (betPct >= 80) return 'background:rgba(16,185,129,0.3);border:1px solid rgba(16,185,129,0.5)';
+    if (betPct >= 60) return 'background:rgba(16,185,129,0.25);border:1px solid rgba(16,185,129,0.3)';
+    if (betPct >= 40) return 'background:rgba(217,119,6,0.25);border:1px solid rgba(217,119,6,0.35)';
+    if (betPct >= 20) return 'background:rgba(244,63,94,0.2);border:1px solid rgba(244,63,94,0.3)';
+    return 'background:rgba(30,41,59,0.8);border:1px solid rgba(51,65,85,0.8)';
+}
+
+function _pfActionBadge(pa, betPct) {
+    if (betPct >= 55) return '<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-600/30 text-emerald-300 border border-emerald-500/30">Bet</span>';
+    if (betPct <= 45) return '<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-slate-700/60 text-slate-300 border border-slate-600/40">Check</span>';
+    return '<span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-700/30 text-amber-300 border border-amber-600/30">Mixed</span>';
+}
+
+function _pfFlopCardsHtml(cards) {
+    if (!cards || !cards.length) return '';
+    return cards.map(c => {
+        const color = _darkBgSuitColor(c.suit);
+        return `<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:38px;background:#0f172a;border:1.5px solid #334155;border-radius:5px;font-weight:900;font-size:11px;color:${color};line-height:1;flex-direction:column;gap:0px;"><span>${c.rank}</span><span style="font-size:10px;">${SUIT_SYMBOLS[c.suit]}</span></span>`;
+    }).join('');
+}
+
+function _pfFreqBars(betPct, checkPct) {
+    return `<div class="flex flex-col gap-1.5 w-full">
+        <div class="flex items-center gap-2"><div class="flex-1 bg-slate-800 rounded-full h-2.5 overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width:${betPct}%"></div></div><span class="text-[10px] font-black text-emerald-400 w-16 text-right">Bet 33% ${betPct}%</span></div>
+        <div class="flex items-center gap-2"><div class="flex-1 bg-slate-800 rounded-full h-2.5 overflow-hidden"><div class="h-full bg-slate-500 rounded-full" style="width:${checkPct}%"></div></div><span class="text-[10px] font-black text-slate-400 w-16 text-right">Check ${checkPct}%</span></div>
+    </div>`;
+}
+
+function _pfGetFamilyArchetypeStrategy(fam, arch) {
+    const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+    if (!fi) return null;
+    const sk = makePostflopSpotKey({ potType:'SRP', preflopFamily:fam, street:'FLOP', heroRole:'PFR', positionState:fi.positionState, nodeType:'CBET_DECISION', boardArchetype:arch });
+    return POSTFLOP_STRATEGY[sk] || null;
+}
+
+function _pfGetV2Strategy(fam, arch, hc) {
+    const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+    if (!fi) return null;
+    const sk = makePostflopSpotKeyV2({ potType:'SRP', preflopFamily:fam, street:'FLOP', heroRole:'PFR', positionState:fi.positionState, nodeType:'CBET_DECISION', boardArchetype:arch, heroHandClass:hc });
+    return POSTFLOP_STRATEGY_V2[sk] || null;
+}
+
+function _pfPotSizingHtml(fam) {
+    const pot = getSRPPot$(fam);
+    const cbet = roundLiveDollars(pot * 0.33);
+    return `<span class="text-[10px] text-slate-500">Pot: ${fmt$(pot)} · 33% c-bet: ${fmt$(cbet)}</span>`;
+}
+
+// ARCHETYPE short labels for matrix columns
+const _ARCH_SHORT = {
+    A_HIGH_DRY:['A-hi','dry'], A_HIGH_DYNAMIC:['A-hi','dyn'], BROADWAY_STATIC:['Bwy','stat'],
+    BROADWAY_DYNAMIC:['Bwy','dyn'], MID_DISCONNECTED:['Mid','disc'], MID_CONNECTED:['Mid','conn'],
+    LOW_DISCONNECTED:['Low','disc'], LOW_CONNECTED:['Low','conn'], PAIRED_HIGH:['Pair','high'],
+    PAIRED_LOW:['Pair','low'], MONOTONE:['Mono','tone'], TRIPS:['Trips','']
+};
+
+// Hand class short labels for matrix rows
+const _HC_SHORT = {
+    OVERPAIR:'Overpair', TOP_PAIR:'Top pair', SECOND_PAIR:'2nd pair', UNDERPAIR:'Underpair',
+    SET:'Set', TWO_PAIR_PLUS:'2 pair+', OESD:'OESD', GUTSHOT:'Gutshot',
+    NFD:'NFD', FD:'Flush dr', COMBO_DRAW:'Combo dr', ACE_HIGH_BACKDOOR:'A-hi/BD', AIR:'Air'
+};
+
+const _HC_ORDER = ['OVERPAIR','TOP_PAIR','SECOND_PAIR','UNDERPAIR','SET','TWO_PAIR_PLUS','OESD','GUTSHOT','NFD','FD','COMBO_DRAW','ACE_HIGH_BACKDOOR','AIR'];
+
+// ── Render postflop control rows ──────────────────────────────
+function renderPostflopLibraryControls() {
+    const pfPosRow = document.getElementById('lib-pf-posstate-row');
+    const pfFamRow = document.getElementById('lib-pf-family-row');
+    const pfViewRow = document.getElementById('lib-pf-view-row');
+
+    // Position state pills
+    pfPosRow.innerHTML = ['IP','OOP'].map(ps => {
+        const active = libSel.pfPosState === ps;
+        const label = ps === 'IP' ? 'In Position' : 'Out of Position';
+        return `<button onclick="setLibPostflopPosState('${ps}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${label}</button>`;
+    }).join('');
+
+    // Family pills
+    const families = _getPostflopFamiliesForPosState(libSel.pfPosState);
+    if (!families.includes(libSel.pfFamily)) libSel.pfFamily = families[0] || 'BTN_vs_BB';
+    pfFamRow.innerHTML = families.map(fam => {
+        const active = libSel.pfFamily === fam;
+        return `<button onclick="setLibPostflopFamily('${fam}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${_pfFamilyLabel(fam)}</button>`;
+    }).join('');
+
+    // View mode pills
+    const isV2 = HERO_HAND_AWARE_FAMILIES.has(libSel.pfFamily);
+    pfViewRow.innerHTML = ['Overview','Matrix','Archetypes'].map(v => {
+        const active = libSel.pfView === v;
+        const disabled = v === 'Matrix' && !isV2;
+        return `<button onclick="setLibPostflopView('${v}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-amber-600 text-white' : disabled ? 'bg-slate-900 text-slate-600 cursor-not-allowed' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}" ${disabled ? 'disabled' : ''}>${v}</button>`;
+    }).join('');
+}
+
+// ── Route to correct postflop view ────────────────────────────
+function renderPostflopLibraryContent() {
+    const area = document.getElementById('lib-chart-area');
+    if (!area) return;
+    const fam = libSel.pfFamily;
+    const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+    if (!fi) { area.innerHTML = '<div class="text-slate-500 text-sm mt-10">Postflop library unavailable. No postflop study data found.</div>'; return; }
+
+    if (libSel.pfView === 'Overview') renderPostflopOverview(area, fam, fi);
+    else if (libSel.pfView === 'Matrix') renderPostflopMatrix(area, fam, fi);
+    else if (libSel.pfView === 'Archetypes') renderPostflopArchetypes(area, fam, fi);
+    else renderPostflopOverview(area, fam, fi);
+}
+
+// ═══ A. OVERVIEW VIEW ═════════════════════════════════════════
+function renderPostflopOverview(area, fam, fi) {
+    const isV2 = HERO_HAND_AWARE_FAMILIES.has(fam);
+    const posLabel = fi.positionState === 'IP' ? 'In Position' : 'Out of Position';
+
+    // Gather archetype data
+    const archData = [];
+    let totalBet = 0;
+    for (const arch of FLOP_ARCHETYPES) {
+        const strat = _pfGetFamilyArchetypeStrategy(fam, arch);
+        const betPct = strat ? Math.round(strat.actions.bet33 * 100) : 0;
+        totalBet += betPct;
+        const exFlop = generateFlopForArchetype(arch);
+        archData.push({ arch, strat, betPct, exFlop });
+    }
+    const avgBet = Math.round(totalBet / FLOP_ARCHETYPES.length);
+
+    // Sort for takeaways
+    const sorted = [...archData].sort((a, b) => b.betPct - a.betPct);
+    const top3 = sorted.slice(0, 3);
+    const bot3 = sorted.slice(-3).reverse();
+
+    // Position takeaway
+    let postureLine;
+    if (avgBet >= 58) postureLine = 'This is a higher-frequency c-bet node overall.';
+    else if (avgBet >= 42) postureLine = 'This is a mixed c-bet node overall.';
+    else postureLine = 'This is a check-heavier node overall.';
+
+    let html = '';
+
+    // 1. Family header card
+    html += `<div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-sm font-black text-white">${_pfFamilyLabel(fam)} — Flop C-Bet</div>
+        <div class="text-[11px] text-slate-400 mt-0.5">Single-raised pot · PFR · ${posLabel}</div>
+        <div class="text-[10px] mt-2 ${isV2 ? 'text-emerald-400' : 'text-slate-500'}">${isV2 ? 'Hand-class matrix available for this family.' : 'Archetype-level reference only for now.'}</div>
+    </div>`;
+
+    // 2. Core principles card
+    html += `<div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">How to think about this node</div>
+        <div class="flex flex-col gap-1.5 text-[11px] text-slate-300 leading-relaxed">
+            <div>You are the preflop raiser deciding between check and a 33% c-bet on the flop.</div>
+            <div>Dry, high-card boards usually favor the raiser more than low, connected boards.</div>
+            <div>In position, you can c-bet more often. Out of position, checking increases.</div>
+            <div>Strong made hands and good draws bet more. Weak hands depend on board texture.</div>
+        </div>
+    </div>`;
+
+    // 3. Archetype summary heat-strip (2-column grid)
+    html += `<div class="w-full max-w-md">
+        <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Board texture summary</div>
+        <div class="grid grid-cols-2 gap-2">`;
+    for (const ad of archData) {
+        const label = ARCHETYPE_LABELS[ad.arch] || ad.arch;
+        const flopHtml = _pfFlopCardsHtml(ad.exFlop);
+        html += `<button onclick="_pfJumpToArchetype('${ad.arch}')" class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-left hover:border-slate-600 transition-all" style="${_pfFreqBg(ad.betPct)}">
+            <div class="text-[10px] font-black text-white mb-1">${label}</div>
+            <div class="flex gap-0.5 mb-1.5">${flopHtml}</div>
+            <div class="flex items-center justify-between">
+                ${_pfActionBadge(ad.strat?.preferredAction, ad.betPct)}
+                <span class="text-[11px] font-black ${ad.betPct >= 50 ? 'text-emerald-400' : 'text-slate-400'}">${ad.betPct}%</span>
+            </div>
+        </button>`;
+    }
+    html += `</div></div>`;
+
+    // 4. Position takeaway card
+    html += `<div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Key takeaways</div>
+        <div class="text-[12px] font-bold text-white mb-2">${postureLine}</div>
+        <div class="text-[11px] text-slate-300 mb-1"><span class="text-emerald-400 font-bold">Best boards for betting:</span> ${top3.map(a => ARCHETYPE_LABELS[a.arch]).join(', ')}</div>
+        <div class="text-[11px] text-slate-300"><span class="text-slate-400 font-bold">Best boards for checking:</span> ${bot3.map(a => ARCHETYPE_LABELS[a.arch]).join(', ')}</div>
+        <div class="mt-2">${_pfPotSizingHtml(fam)}</div>
+    </div>`;
+
+    // 5. Study CTA footer
+    html += `<div class="w-full max-w-md flex flex-col gap-2">`;
+    if (isV2) {
+        html += `<button onclick="setLibPostflopView('Matrix')" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-black text-xs uppercase tracking-widest transition-all">Open hand-class matrix</button>`;
+    }
+    html += `<button onclick="setLibPostflopView('Archetypes')" class="w-full py-3 bg-slate-800 border border-slate-700 hover:border-slate-500 rounded-xl font-black text-xs uppercase tracking-widest text-slate-200 transition-all">Study board textures</button>`;
+    html += `</div>`;
+
+    area.innerHTML = html;
+}
+
+// ═══ B. MATRIX VIEW ═══════════════════════════════════════════
+function renderPostflopMatrix(area, fam, fi) {
+    if (!HERO_HAND_AWARE_FAMILIES.has(fam)) {
+        libSel.pfView = 'Overview';
+        renderPostflopOverview(area, fam, fi);
+        return;
+    }
+
+    let html = '';
+
+    // 1. Sticky matrix header
+    html += `<div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-1">
+        <div class="text-sm font-black text-white">Hand-Class Matrix</div>
+        <div class="text-[11px] text-slate-400 mt-0.5">${_pfFamilyLabel(fam)} · ${fi.positionState === 'IP' ? 'In Position' : 'Out of Position'}</div>
+        <div class="text-[10px] text-slate-500 mt-1">Tap any cell to see exact frequency and why.</div>
+    </div>`;
+
+    // 2. Matrix
+    const cellW = 58;
+    const rowLabelW = 68;
+    const totalW = rowLabelW + FLOP_ARCHETYPES.length * cellW;
+
+    html += `<div class="w-full overflow-x-auto scroll-hide" style="max-width:100%;">
+        <div style="min-width:${totalW}px;padding:0 4px;">
+        <div class="flex">
+            <div style="min-width:${rowLabelW}px;max-width:${rowLabelW}px;" class="text-[8px] font-black text-slate-500 flex items-end pb-1 px-1">Hand / Board</div>`;
+    // Column headers
+    for (const arch of FLOP_ARCHETYPES) {
+        const sh = _ARCH_SHORT[arch] || [arch.slice(0,4),''];
+        html += `<div style="min-width:${cellW}px;max-width:${cellW}px;" class="text-center px-0.5 pb-1">
+            <div class="text-[8px] font-black text-slate-400 leading-tight">${sh[0]}</div>
+            <div class="text-[7px] font-bold text-slate-500 leading-tight">${sh[1]}</div>
+        </div>`;
+    }
+    html += `</div>`;
+
+    // Rows: each hand class
+    // Track column/row averages for pattern strip
+    const colTotals = new Array(FLOP_ARCHETYPES.length).fill(0);
+    const rowTotals = {};
+
+    for (const hc of _HC_ORDER) {
+        const label = _HC_SHORT[hc] || hc;
+        html += `<div class="flex border-t border-slate-800/50">
+            <div style="min-width:${rowLabelW}px;max-width:${rowLabelW}px;" class="text-[9px] font-bold text-slate-300 flex items-center px-1 py-0.5">${label}</div>`;
+        let rowSum = 0;
+        FLOP_ARCHETYPES.forEach((arch, ci) => {
+            const v2 = _pfGetV2Strategy(fam, arch, hc);
+            const betPct = v2 ? Math.round(v2.actions.bet33 * 100) : 0;
+            rowSum += betPct;
+            colTotals[ci] += betPct;
+            const isSelected = libSel.pfSelectedHandClass === `${hc}|${arch}`;
+            const selBorder = isSelected ? 'border:2px solid #818cf8;' : '';
+            html += `<button onclick="setLibPostflopMatrixCell('${hc}','${arch}')" style="min-width:${cellW}px;max-width:${cellW}px;${_pfFreqBg(betPct)};${selBorder}" class="flex flex-col items-center justify-center py-1.5 px-0.5 transition-all hover:brightness-125">
+                <span class="text-[11px] font-black ${betPct >= 50 ? 'text-white' : 'text-slate-300'}">${betPct}%</span>
+                <span class="text-[7px] font-bold ${betPct >= 50 ? 'text-emerald-300' : 'text-slate-500'}">${betPct >= 50 ? 'B' : 'X'}</span>
+            </button>`;
+        });
+        rowTotals[hc] = Math.round(rowSum / FLOP_ARCHETYPES.length);
+        html += `</div>`;
+    }
+    html += `</div></div>`;
+
+    // 3. Cell detail panel
+    if (libSel.pfSelectedHandClass) {
+        const [selHC, selArch] = libSel.pfSelectedHandClass.split('|');
+        html += _renderMatrixCellDetail(fam, fi, selHC, selArch);
+    }
+
+    // 4. Quick pattern strip
+    html += _renderMatrixPatternStrip(colTotals, rowTotals);
+
+    area.innerHTML = html;
+}
+
+function setLibPostflopMatrixCell(hc, arch) {
+    const key = `${hc}|${arch}`;
+    libSel.pfSelectedHandClass = libSel.pfSelectedHandClass === key ? null : key;
+    renderLibrary();
+}
+
+function _renderMatrixCellDetail(fam, fi, hc, arch) {
+    const v2 = _pfGetV2Strategy(fam, arch, hc);
+    const archStrat = _pfGetFamilyArchetypeStrategy(fam, arch);
+    if (!v2) return '<div class="w-full max-w-md mt-2 bg-slate-900 border border-slate-800 rounded-2xl p-4 text-sm text-slate-500">No strategy data for this selection.</div>';
+
+    const betPct = Math.round(v2.actions.bet33 * 100);
+    const checkPct = 100 - betPct;
+    const hcLabel = HAND_CLASS_LABELS[hc] || hc;
+    const archLabel = ARCHETYPE_LABELS[arch] || arch;
+    const exFlops = [generateFlopForArchetype(arch), generateFlopForArchetype(arch)];
+
+    return `<div class="w-full max-w-md mt-2 bg-slate-900 border border-indigo-500/30 rounded-2xl p-4">
+        <div class="text-xs font-black text-white">${hcLabel} on ${archLabel}</div>
+        <div class="text-[10px] text-slate-400 mt-0.5 mb-3">${_pfFamilyLabel(fam)} · Flop C-Bet · 33% sizing</div>
+        ${_pfFreqBars(betPct, checkPct)}
+        <div class="mt-3 mb-3">${_pfActionBadge(v2.preferredAction, betPct)}</div>
+        <div class="flex flex-col gap-2 text-[11px] leading-relaxed">
+            <div><span class="font-black text-slate-400">Board principle:</span> <span class="text-slate-300">${archStrat?.reasoning || '—'}</span></div>
+            <div><span class="font-black text-slate-400">Hand-class principle:</span> <span class="text-slate-300">${v2.reasoning || '—'}</span></div>
+        </div>
+        <div class="mt-3">
+            <div class="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Example flops</div>
+            <div class="flex gap-3">${exFlops.map(f => `<div class="flex gap-0.5">${_pfFlopCardsHtml(f)}</div>`).join('')}</div>
+        </div>
+        <div class="mt-3">${_pfPotSizingHtml(fam)}</div>
+    </div>`;
+}
+
+function _renderMatrixPatternStrip(colTotals, rowTotals) {
+    // Column averages (boards)
+    const colAvg = FLOP_ARCHETYPES.map((arch, i) => ({ arch, avg: Math.round(colTotals[i] / _HC_ORDER.length) }));
+    const sortedCols = [...colAvg].sort((a, b) => b.avg - a.avg);
+    const topBoardsBet = sortedCols.slice(0, 3);
+    const botBoardsCheck = sortedCols.slice(-3).reverse();
+
+    // Row averages (hand classes)
+    const rowArr = _HC_ORDER.map(hc => ({ hc, avg: rowTotals[hc] || 0 }));
+    const sortedRows = [...rowArr].sort((a, b) => b.avg - a.avg);
+    // Draws/bluffs: OESD,GUTSHOT,NFD,FD,COMBO_DRAW,ACE_HIGH_BACKDOOR,AIR
+    const drawLike = new Set(['OESD','GUTSHOT','NFD','FD','COMBO_DRAW','ACE_HIGH_BACKDOOR','AIR']);
+    const topBluffs = sortedRows.filter(r => drawLike.has(r.hc)).slice(0, 3);
+    const checkHeavy = [...rowArr].sort((a, b) => a.avg - b.avg).slice(0, 3);
+
+    return `<div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-4 mt-1">
+        <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">What stands out</div>
+        <div class="flex flex-col gap-1.5 text-[11px] text-slate-300 leading-relaxed">
+            <div><span class="text-emerald-400 font-bold">Best semi-bluff classes:</span> ${topBluffs.map(r => _HC_SHORT[r.hc] + ' ' + r.avg + '%').join(', ')}</div>
+            <div><span class="text-slate-400 font-bold">Most check-heavy classes:</span> ${checkHeavy.map(r => _HC_SHORT[r.hc] + ' ' + r.avg + '%').join(', ')}</div>
+            <div><span class="text-emerald-400 font-bold">Most bet-heavy boards:</span> ${topBoardsBet.map(b => ARCHETYPE_LABELS[b.arch] + ' ' + b.avg + '%').join(', ')}</div>
+            <div><span class="text-slate-400 font-bold">Most check-heavy boards:</span> ${botBoardsCheck.map(b => ARCHETYPE_LABELS[b.arch] + ' ' + b.avg + '%').join(', ')}</div>
+        </div>
+    </div>`;
+}
+
+// ═══ C. ARCHETYPES VIEW ═══════════════════════════════════════
+function renderPostflopArchetypes(area, fam, fi) {
+    const isV2 = HERO_HAND_AWARE_FAMILIES.has(fam);
+    const arch = libSel.pfArchetype || 'A_HIGH_DRY';
+
+    let html = '';
+
+    // 1. Archetype picker strip
+    html += `<div class="w-full overflow-x-auto scroll-hide pb-1 flex gap-1.5">`;
+    for (const a of FLOP_ARCHETYPES) {
+        const active = a === arch;
+        const label = ARCHETYPE_LABELS[a] || a;
+        html += `<button onclick="setLibPostflopArchetype('${a}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[10px] transition-all ${active ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${label}</button>`;
+    }
+    html += `</div>`;
+
+    // 2. Selected archetype detail card
+    const strat = _pfGetFamilyArchetypeStrategy(fam, arch);
+    const betPct = strat ? Math.round(strat.actions.bet33 * 100) : 0;
+    const checkPct = 100 - betPct;
+    const archLabel = ARCHETYPE_LABELS[arch] || arch;
+    const exFlops = [generateFlopForArchetype(arch), generateFlopForArchetype(arch), generateFlopForArchetype(arch)];
+
+    html += `<div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <div class="text-sm font-black text-white mb-1">${archLabel}</div>
+        <div class="text-[11px] text-slate-400 mb-3">${_pfFamilyLabel(fam)} · Flop C-Bet</div>
+        <div class="flex gap-3 mb-3">${exFlops.map(f => `<div class="flex gap-0.5">${_pfFlopCardsHtml(f)}</div>`).join('')}</div>
+        ${_pfFreqBars(betPct, checkPct)}
+        <div class="mt-3 mb-2">${_pfActionBadge(strat?.preferredAction, betPct)}</div>
+        <div class="text-[11px] text-slate-300 leading-relaxed">${strat?.reasoning || 'No data.'}</div>
+        <div class="mt-3">${_pfPotSizingHtml(fam)}</div>
+    </div>`;
+
+    // 3. If V2-capable: hand-class recommendations list
+    if (isV2) {
+        const hcData = _HC_ORDER.map(hc => {
+            const v2 = _pfGetV2Strategy(fam, arch, hc);
+            const bet = v2 ? Math.round(v2.actions.bet33 * 100) : 0;
+            return { hc, bet, v2 };
+        }).sort((a, b) => b.bet - a.bet);
+
+        html += `<div class="w-full max-w-md">
+            <div class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 mt-1">Hand-class recommendations</div>
+            <div class="flex flex-col gap-1">`;
+
+        for (const item of hcData) {
+            const label = HAND_CLASS_LABELS[item.hc] || item.hc;
+            const isExpanded = libSel.pfSelectedHandClass === item.hc;
+            const chevron = isExpanded ? '▾' : '▸';
+            html += `<button onclick="setLibPostflopHandClass('${item.hc}')" class="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-left hover:border-slate-600 transition-all">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] font-bold text-white">${label}</span>
+                        ${_pfActionBadge(item.v2?.preferredAction, item.bet)}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] font-black ${item.bet >= 50 ? 'text-emerald-400' : 'text-slate-400'}">${item.bet}%</span>
+                        <span class="text-slate-500 text-[10px]">${chevron}</span>
+                    </div>
+                </div>`;
+            if (isExpanded && item.v2) {
+                html += `<div class="mt-2 pt-2 border-t border-slate-800">
+                    ${_pfFreqBars(item.bet, 100 - item.bet)}
+                    <div class="mt-2 text-[11px] text-slate-300 leading-relaxed">${item.v2.reasoning || ''}</div>
+                </div>`;
+            }
+            html += `</button>`;
+        }
+        html += `</div></div>`;
+    } else {
+        // 4. Non-V2 fallback card
+        html += `<div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <div class="text-xs font-black text-white mb-1">No hand-class matrix yet</div>
+            <div class="text-[11px] text-slate-400 leading-relaxed">This family is available at the board-texture level only.</div>
+            <div class="text-[11px] text-slate-400 leading-relaxed mt-1">For hand-class study, switch to BTN vs BB or CO vs BB.</div>
+        </div>`;
+    }
+
+    area.innerHTML = html;
+}
+
 // ── Render the single chart for current selection ─────────────
 function renderLibraryChart() {
     const cat = libSel.category;
     const area = document.getElementById('lib-chart-area');
     if (!area) return;
+    if (cat === 'POSTFLOP') return; // handled by renderPostflopLibraryContent
 
     const spots = getLibSpots();
     let spot = null;
