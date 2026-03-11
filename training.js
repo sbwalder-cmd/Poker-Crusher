@@ -1242,12 +1242,12 @@ const _ARCH_SHORT = {
 
 // Hand class short labels for matrix rows
 const _HC_SHORT = {
-    OVERPAIR:'Overpair', TOP_PAIR:'Top pair', SECOND_PAIR:'2nd pair', UNDERPAIR:'Underpair',
+    OVERPAIR:'Overpair', TOP_PAIR:'Top pair', SECOND_PAIR:'2nd pair', THIRD_PAIR:'3rd pair', UNDERPAIR:'Underpair',
     SET:'Set', TWO_PAIR_PLUS:'2 pair+', OESD:'OESD', GUTSHOT:'Gutshot',
-    NFD:'NFD', FD:'Flush dr', COMBO_DRAW:'Combo dr', ACE_HIGH_BACKDOOR:'A-hi/BD', AIR:'Air'
+    NFD:'NFD', FD:'Flush dr', COMBO_DRAW:'Combo dr', ACE_HIGH_BACKDOOR:'A-hi/BD', OVERCARDS:'Overcards', AIR:'Air'
 };
 
-const _HC_ORDER = ['OVERPAIR','TOP_PAIR','SECOND_PAIR','UNDERPAIR','SET','TWO_PAIR_PLUS','OESD','GUTSHOT','NFD','FD','COMBO_DRAW','ACE_HIGH_BACKDOOR','AIR'];
+const _HC_ORDER = ['OVERPAIR','TOP_PAIR','SECOND_PAIR','THIRD_PAIR','UNDERPAIR','SET','TWO_PAIR_PLUS','OESD','GUTSHOT','NFD','FD','COMBO_DRAW','ACE_HIGH_BACKDOOR','OVERCARDS','AIR'];
 
 // ── Render postflop control rows ──────────────────────────────
 function renderPostflopLibraryControls() {
