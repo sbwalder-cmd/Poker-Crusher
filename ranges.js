@@ -1865,3 +1865,275 @@ function flopCardStr(card){return card.rank+(SUIT_SYMBOLS[card.suit]||card.suit)
 function flopStr(cards){return cards.map(flopCardStr).join(' ');}
 function flopSuitColor(suit){return(suit==='h'||suit==='d')?'#dc2626':'#0f172a';}
 function isPostflopSpotKey(key){return key.startsWith('SRP|')||key.startsWith('3BP|')||key.startsWith('LIMP_POT|');}
+
+// ============================================================
+// DEFENDER VS C-BET — SRP Flop (V3.1)
+// ============================================================
+// Hero is the defender (caller preflop) facing a 33% c-bet from the PFR.
+// Actions: fold, call, raise
+// Families: BTN_vs_BB (hero=BB), CO_vs_BB (hero=BB), SB_vs_BB (hero=BB)
+// In all three families, hero is BB defending.
+
+const DEFENDER_FAMILIES = ['BTN_vs_BB', 'CO_vs_BB', 'SB_vs_BB'];
+
+const POSTFLOP_DEFEND_VS_CBET = {};
+
+(function() {
+    const HAND_CLASSES = [
+        'OVERPAIR','TOP_PAIR','SECOND_PAIR','THIRD_PAIR','UNDERPAIR','SET','TWO_PAIR_PLUS',
+        'OESD','GUTSHOT','NFD','FD','COMBO_DRAW','ACE_HIGH_BACKDOOR','OVERCARDS','AIR'
+    ];
+
+    // Base defender frequencies: { handClass: { archetype: { fold, call, raise } } }
+    // _default used when archetype not specified.
+    // Hero is BB (OOP) facing a 33% c-bet in SRP.
+    // General logic:
+    //   Strong hands → raise for value, some slow-play (call)
+    //   Top pair → mostly call, occasional raise on dry boards
+    //   Medium pairs → call or fold depending on texture
+    //   Draws → call often, raise sometimes as semi-bluff
+    //   Air → mostly fold, bluff raise occasionally
+
+    const BASE = {
+        SET:              { _default: { fold: 0.00, call: 0.40, raise: 0.60 },
+                            MONOTONE: { fold: 0.00, call: 0.30, raise: 0.70 }, TRIPS: { fold: 0.00, call: 0.55, raise: 0.45 },
+                            LOW_CONNECTED: { fold: 0.00, call: 0.35, raise: 0.65 } },
+        TWO_PAIR_PLUS:    { _default: { fold: 0.00, call: 0.45, raise: 0.55 },
+                            MONOTONE: { fold: 0.00, call: 0.35, raise: 0.65 }, TRIPS: { fold: 0.00, call: 0.60, raise: 0.40 },
+                            A_HIGH_DRY: { fold: 0.00, call: 0.50, raise: 0.50 } },
+        OVERPAIR:         { _default: { fold: 0.00, call: 0.65, raise: 0.35 },
+                            A_HIGH_DRY: { fold: 0.00, call: 0.60, raise: 0.40 }, A_HIGH_DYNAMIC: { fold: 0.00, call: 0.70, raise: 0.30 },
+                            BROADWAY_DYNAMIC: { fold: 0.00, call: 0.70, raise: 0.30 }, LOW_CONNECTED: { fold: 0.00, call: 0.55, raise: 0.45 },
+                            MONOTONE: { fold: 0.05, call: 0.65, raise: 0.30 } },
+        TOP_PAIR:         { _default: { fold: 0.02, call: 0.80, raise: 0.18 },
+                            A_HIGH_DRY: { fold: 0.00, call: 0.82, raise: 0.18 }, A_HIGH_DYNAMIC: { fold: 0.05, call: 0.78, raise: 0.17 },
+                            BROADWAY_STATIC: { fold: 0.02, call: 0.80, raise: 0.18 }, BROADWAY_DYNAMIC: { fold: 0.05, call: 0.78, raise: 0.17 },
+                            MID_CONNECTED: { fold: 0.05, call: 0.75, raise: 0.20 }, LOW_CONNECTED: { fold: 0.05, call: 0.72, raise: 0.23 },
+                            MONOTONE: { fold: 0.10, call: 0.72, raise: 0.18 } },
+        SECOND_PAIR:      { _default: { fold: 0.25, call: 0.65, raise: 0.10 },
+                            A_HIGH_DRY: { fold: 0.20, call: 0.70, raise: 0.10 }, BROADWAY_STATIC: { fold: 0.22, call: 0.68, raise: 0.10 },
+                            MID_CONNECTED: { fold: 0.30, call: 0.58, raise: 0.12 }, LOW_CONNECTED: { fold: 0.35, call: 0.52, raise: 0.13 },
+                            MONOTONE: { fold: 0.35, call: 0.55, raise: 0.10 } },
+        THIRD_PAIR:       { _default: { fold: 0.40, call: 0.52, raise: 0.08 },
+                            A_HIGH_DRY: { fold: 0.35, call: 0.57, raise: 0.08 }, MID_CONNECTED: { fold: 0.45, call: 0.45, raise: 0.10 },
+                            LOW_CONNECTED: { fold: 0.50, call: 0.40, raise: 0.10 }, MONOTONE: { fold: 0.50, call: 0.42, raise: 0.08 } },
+        UNDERPAIR:        { _default: { fold: 0.45, call: 0.48, raise: 0.07 },
+                            A_HIGH_DRY: { fold: 0.38, call: 0.55, raise: 0.07 }, MID_CONNECTED: { fold: 0.50, call: 0.42, raise: 0.08 },
+                            LOW_CONNECTED: { fold: 0.55, call: 0.38, raise: 0.07 }, MONOTONE: { fold: 0.55, call: 0.38, raise: 0.07 } },
+        COMBO_DRAW:       { _default: { fold: 0.02, call: 0.55, raise: 0.43 },
+                            A_HIGH_DRY: { fold: 0.05, call: 0.60, raise: 0.35 }, MID_CONNECTED: { fold: 0.00, call: 0.48, raise: 0.52 },
+                            LOW_CONNECTED: { fold: 0.00, call: 0.45, raise: 0.55 }, MONOTONE: { fold: 0.05, call: 0.50, raise: 0.45 } },
+        NFD:              { _default: { fold: 0.03, call: 0.62, raise: 0.35 },
+                            A_HIGH_DRY: { fold: 0.05, call: 0.65, raise: 0.30 }, MID_CONNECTED: { fold: 0.02, call: 0.55, raise: 0.43 },
+                            MONOTONE: { fold: 0.05, call: 0.58, raise: 0.37 } },
+        FD:               { _default: { fold: 0.08, call: 0.70, raise: 0.22 },
+                            A_HIGH_DRY: { fold: 0.10, call: 0.72, raise: 0.18 }, MID_CONNECTED: { fold: 0.05, call: 0.65, raise: 0.30 },
+                            MONOTONE: { fold: 0.10, call: 0.68, raise: 0.22 } },
+        OESD:             { _default: { fold: 0.05, call: 0.68, raise: 0.27 },
+                            A_HIGH_DRY: { fold: 0.10, call: 0.70, raise: 0.20 }, BROADWAY_DYNAMIC: { fold: 0.03, call: 0.62, raise: 0.35 },
+                            MID_CONNECTED: { fold: 0.03, call: 0.60, raise: 0.37 }, LOW_CONNECTED: { fold: 0.03, call: 0.58, raise: 0.39 } },
+        GUTSHOT:          { _default: { fold: 0.30, call: 0.58, raise: 0.12 },
+                            A_HIGH_DRY: { fold: 0.35, call: 0.55, raise: 0.10 }, BROADWAY_DYNAMIC: { fold: 0.25, call: 0.60, raise: 0.15 },
+                            MID_CONNECTED: { fold: 0.25, call: 0.58, raise: 0.17 } },
+        ACE_HIGH_BACKDOOR:{ _default: { fold: 0.35, call: 0.52, raise: 0.13 },
+                            A_HIGH_DRY: { fold: 0.25, call: 0.60, raise: 0.15 }, A_HIGH_DYNAMIC: { fold: 0.30, call: 0.55, raise: 0.15 },
+                            BROADWAY_STATIC: { fold: 0.30, call: 0.55, raise: 0.15 }, MID_CONNECTED: { fold: 0.40, call: 0.47, raise: 0.13 },
+                            LOW_CONNECTED: { fold: 0.45, call: 0.43, raise: 0.12 }, MONOTONE: { fold: 0.42, call: 0.45, raise: 0.13 } },
+        OVERCARDS:        { _default: { fold: 0.50, call: 0.40, raise: 0.10 },
+                            A_HIGH_DRY: { fold: 0.40, call: 0.48, raise: 0.12 }, BROADWAY_STATIC: { fold: 0.42, call: 0.46, raise: 0.12 },
+                            MID_DISCONNECTED: { fold: 0.50, call: 0.40, raise: 0.10 }, LOW_CONNECTED: { fold: 0.60, call: 0.32, raise: 0.08 },
+                            MONOTONE: { fold: 0.58, call: 0.34, raise: 0.08 } },
+        AIR:              { _default: { fold: 0.72, call: 0.18, raise: 0.10 },
+                            A_HIGH_DRY: { fold: 0.65, call: 0.22, raise: 0.13 }, BROADWAY_STATIC: { fold: 0.68, call: 0.20, raise: 0.12 },
+                            MID_DISCONNECTED: { fold: 0.72, call: 0.18, raise: 0.10 }, MID_CONNECTED: { fold: 0.78, call: 0.14, raise: 0.08 },
+                            LOW_CONNECTED: { fold: 0.82, call: 0.12, raise: 0.06 }, MONOTONE: { fold: 0.78, call: 0.14, raise: 0.08 },
+                            TRIPS: { fold: 0.68, call: 0.20, raise: 0.12 } }
+    };
+
+    const REASONING = {
+        SET: 'Sets should raise for value and protection. Sometimes slow-play on dry boards.',
+        TWO_PAIR_PLUS: 'Two pair+ is strong; raise frequently, call to trap on dry textures.',
+        OVERPAIR: 'Overpairs are strong vs a c-bet range; mostly call, raise on wet boards for protection.',
+        TOP_PAIR: 'Top pair is a core calling hand. Rarely fold. Raise occasionally for value on dry boards.',
+        SECOND_PAIR: 'Second pair is a medium-strength call. Fold on very wet boards.',
+        THIRD_PAIR: 'Third/bottom pair is marginal. Call on dry boards, fold on wet/dynamic boards.',
+        UNDERPAIR: 'Underpairs are weak. Call sometimes on dry boards, fold on wet textures.',
+        COMBO_DRAW: 'Combo draws have excellent equity. Raise as a semi-bluff frequently.',
+        NFD: 'Nut flush draws have strong equity. Call or raise as a semi-bluff.',
+        FD: 'Flush draws have decent equity. Mostly call, raise occasionally.',
+        OESD: 'Open-ended draws have ~32% equity. Call is standard, raise on wet boards.',
+        GUTSHOT: 'Gutshots are marginal. Call with good implied odds, fold weak gutshots.',
+        ACE_HIGH_BACKDOOR: 'Ace-high with backdoor equity. Call on favorable boards, fold on wet ones.',
+        OVERCARDS: 'Two overcards have some equity but no pair. Call sparingly, mostly fold.',
+        AIR: 'No made hand or draw. Fold is default; raise-bluff occasionally on PFR-favorable boards.'
+    };
+
+    // Family offsets: SB_vs_BB defender defends slightly wider (SB opened tighter range)
+    const FAM_OFF = { BTN_vs_BB: 0, CO_vs_BB: 0.02, SB_vs_BB: 0.03 };
+    // Positive offset → less folding (wider defense). Applied as: fold -= off, call += off/2, raise += off/2
+
+    for (const fam of DEFENDER_FAMILIES) {
+        const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+        if (!fi) continue;
+        const off = FAM_OFF[fam] || 0;
+
+        for (const arch of FLOP_ARCHETYPES) {
+            for (const hc of HAND_CLASSES) {
+                const hcData = BASE[hc];
+                if (!hcData) continue;
+                const raw = hcData[arch] || hcData._default;
+                if (!raw) continue;
+
+                // Apply family offset
+                let fold = Math.max(0, raw.fold - off);
+                let call = raw.call + off * 0.5;
+                let raise = raw.raise + off * 0.5;
+                // Normalize to sum to 1
+                const total = fold + call + raise;
+                fold = parseFloat((fold / total).toFixed(2));
+                call = parseFloat((call / total).toFixed(2));
+                raise = parseFloat((1 - fold - call).toFixed(2));
+                // Clamp
+                fold = Math.max(0, Math.min(1, fold));
+                call = Math.max(0, Math.min(1, call));
+                raise = Math.max(0, Math.min(1, raise));
+
+                // Determine preferred action
+                let preferred;
+                if (fold >= call && fold >= raise) preferred = 'fold';
+                else if (raise >= call && raise >= fold) preferred = 'raise';
+                else preferred = 'call';
+
+                const sk = makePostflopSpotKeyV2({
+                    potType:'SRP', preflopFamily:fam, street:'FLOP', heroRole:'DEFENDER',
+                    positionState:'OOP', nodeType:'VS_CBET_DECISION',
+                    boardArchetype:arch, heroHandClass:hc
+                });
+                POSTFLOP_DEFEND_VS_CBET[sk] = {
+                    actions: { fold, call, raise },
+                    preferredAction: preferred,
+                    reasoning: REASONING[hc] || '',
+                    simplification: 'V3.1: Defender vs C-Bet'
+                };
+            }
+        }
+    }
+
+    if (window.RANGE_VALIDATE) {
+        console.log(`[DefendVsCbet] Built ${Object.keys(POSTFLOP_DEFEND_VS_CBET).length} defender strategy entries.`);
+    }
+})();
+
+// --- Defender spot generation ---
+
+/**
+ * Generate a defender-vs-cbet postflop spot.
+ * Hero is BB (defender). Villain is the PFR who c-bets.
+ * familyFilter: optional array of family keys to restrict.
+ */
+function generateDefenderSpot(maxRetries, familyFilter) {
+    maxRetries = maxRetries || 20;
+    let fams = [...DEFENDER_FAMILIES];
+    if (familyFilter && Array.isArray(familyFilter) && familyFilter.length > 0) {
+        const filtered = fams.filter(f => familyFilter.includes(f));
+        if (filtered.length > 0) fams = filtered;
+    }
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const fam = fams[Math.floor(Math.random() * fams.length)];
+        const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+        if (!fi) continue;
+
+        const arch = pickFlopArchetype();
+        // Hero is BB (the defender) — deal from BB's calling range vs this villain
+        const villainPos = fi.heroPos; // fi.heroPos is the PFR position
+        const heroHand = _dealDefenderHeroHand(villainPos);
+        if (!heroHand) continue;
+        const fc = _generateFlopNoConflict(arch, heroHand);
+        const heroHandClass = classifyFlopHand(heroHand, fc);
+
+        const spot = {
+            potType:'SRP', preflopFamily:fam, street:'FLOP', heroRole:'DEFENDER',
+            positionState:'OOP', nodeType:'VS_CBET_DECISION',
+            boardArchetype:arch,
+            heroPos:'BB', villainPos:villainPos,
+            flopCards:fc, flopClassification:classifyFlop(fc),
+            heroHand: heroHand,
+            heroHandClass: heroHandClass
+        };
+        spot.spotKey = makePostflopSpotKeyV2(spot);
+        spot.strategy = POSTFLOP_DEFEND_VS_CBET[spot.spotKey] || null;
+
+        if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
+    }
+
+    // Fallback
+    console.warn('[DefendVsCbet] Retries exhausted; forcing BTN_vs_BB fallback.');
+    const heroHand = _dealDefenderHeroHand('BTN') || _concreteHand('AK', true);
+    const arch = 'A_HIGH_DRY';
+    const fc = _generateFlopNoConflict(arch, heroHand);
+    const heroHandClass = classifyFlopHand(heroHand, fc);
+    const spot = {
+        potType:'SRP', preflopFamily:'BTN_vs_BB', street:'FLOP', heroRole:'DEFENDER',
+        positionState:'OOP', nodeType:'VS_CBET_DECISION',
+        boardArchetype:arch, heroPos:'BB', villainPos:'BTN',
+        flopCards:fc, flopClassification:classifyFlop(fc),
+        heroHand: heroHand, heroHandClass: heroHandClass
+    };
+    spot.spotKey = makePostflopSpotKeyV2(spot);
+    spot.strategy = POSTFLOP_DEFEND_VS_CBET[spot.spotKey] || null;
+    return spot;
+}
+
+/**
+ * Deal a concrete hero hand from BB's calling range vs a specific villain position.
+ * Returns { cards: [{rank, suit}, {rank, suit}], handKey: 'AKs' } or null.
+ */
+function _dealDefenderHeroHand(villainPos) {
+    const key = 'BB_vs_' + villainPos;
+    const data = facingRfiRanges[key];
+    if (!data || !data['Call'] || data['Call'].length === 0) {
+        // Fallback: use a reasonable generic calling range
+        return _concreteHand('AJs', true);
+    }
+    const callRange = data['Call'];
+    const allHands = [];
+    for (const token of callRange) {
+        for (const h of _expandSingle(token)) allHands.push(h);
+    }
+    if (allHands.length === 0) return _concreteHand('AJs', true);
+    const handKey = allHands[Math.floor(Math.random() * allHands.length)];
+    const suited = handKey.endsWith('s');
+    return _concreteHand(handKey, suited);
+}
+
+// --- Defender action scoring ---
+
+function scoreDefenderAction(playerAction, strategy, spot) {
+    if (!strategy) return { correct: false, grade: 'unknown', feedback: 'No strategy data.' };
+    const actions = strategy.actions;
+    const preferred = strategy.preferredAction;
+    const playerKey = playerAction.toLowerCase(); // fold, call, raise
+    const playerFreq = actions[playerKey] || 0;
+    const isCorrect = playerKey === preferred;
+
+    let grade;
+    if (playerFreq >= 0.50) grade = 'strong';
+    else if (playerFreq >= 0.30) grade = 'marginal';
+    else if (playerFreq >= 0.15) grade = 'marginal_wrong';
+    else grade = 'clear_wrong';
+
+    const preferredLabel = preferred.charAt(0).toUpperCase() + preferred.slice(1);
+    const freqPct = Math.round((actions[preferred] || 0) * 100);
+
+    let feedback;
+    if (isCorrect && grade === 'strong') feedback = `Correct. ${preferredLabel} (${freqPct}%).`;
+    else if (isCorrect && grade === 'marginal') feedback = `Correct. Close spot — ${preferredLabel} slightly preferred (${freqPct}%).`;
+    else if (!isCorrect && grade === 'marginal_wrong') feedback = `Close, but ${preferredLabel} is preferred here (${freqPct}%).`;
+    else feedback = `${preferredLabel} is preferred (${freqPct}%). ${strategy.reasoning}`;
+
+    const handClassLabel = (spot && spot.heroHandClass) ? (HAND_CLASS_LABELS[spot.heroHandClass] || spot.heroHandClass) : null;
+    if (handClassLabel) feedback += ` [${handClassLabel}]`;
+
+    return { correct: isCorrect, grade, feedback, preferredLabel, freqPct, reasoning: strategy.reasoning };
+}
