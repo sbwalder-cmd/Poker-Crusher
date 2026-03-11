@@ -1385,14 +1385,14 @@ const POSTFLOP_STRATEGY={};
     const OFF={UTG_vs_BB:0.05,LJ_vs_BB:0.03,HJ_vs_BB:0.02,CO_vs_BB:0,BTN_vs_BB:0,BTN_vs_SB:0,SB_vs_BB:0,CO_vs_BTN:-0.03};
     for(const[fk,fi]of Object.entries(POSTFLOP_PREFLOP_FAMILIES)){const base=fi.positionState==='IP'?IP:OOP;const off=OFF[fk]||0;for(const arch of FLOP_ARCHETYPES){const raw=base[arch];if(!raw)continue;const ab=Math.max(0.05,Math.min(0.95,raw.bet33+off));const ac=parseFloat((1-ab).toFixed(2));const actions={check:ac,bet33:parseFloat(ab.toFixed(2))};const pa=ab>=0.50?'bet33':'check';const sk=makePostflopSpotKey({potType:'SRP',preflopFamily:fk,street:'FLOP',heroRole:'PFR',positionState:fi.positionState,nodeType:'CBET_DECISION',boardArchetype:arch});POSTFLOP_STRATEGY[sk]={actions,preferredAction:pa,reasoning:raw.r,simplification:'Phase 1: C-Bet vs Check'};}}
 })();
-// Phase 2: Config-screen postflop training serves ONLY hero-hand-aware spots.
+// V3: Config-screen postflop training serves ONLY hero-hand-aware spots.
 // Every generated spot must include a real hero hand, a hand class, and a valid
 // POSTFLOP_STRATEGY_V2 entry.  The old archetype-only prototype families are
 // preserved internally (POSTFLOP_STRATEGY) but are NOT exposed through the
 // normal training flow.  Unsupported families will be added in future phases.
 function generatePostflopSpot(maxRetries, familyFilter){
     maxRetries = maxRetries || 20;
-    // Only pick from hero-hand-aware families (Phase 2 scope: SRP, PFR, IP)
+    // Only pick from hero-hand-aware families (V3 scope: BTN_vs_BB, CO_vs_BB, SB_vs_BB)
     let fams = [...HERO_HAND_AWARE_FAMILIES];
     // Optional family filter: restrict to specified families (for challenge nodes)
     if (familyFilter && Array.isArray(familyFilter) && familyFilter.length > 0) {
@@ -1475,16 +1475,16 @@ function scorePostflopAction(playerAction, strategy, spot) {
 // PHASE 2: Hero-Hand-Aware Postflop
 // ============================================================
 
-// Families that support hero-hand-aware training (Phase 2 scope)
-const HERO_HAND_AWARE_FAMILIES = new Set(['BTN_vs_BB', 'CO_vs_BB']);
+// Families that support hero-hand-aware training (V3 scope: BTN_vs_BB, CO_vs_BB, SB_vs_BB)
+const HERO_HAND_AWARE_FAMILIES = new Set(['BTN_vs_BB', 'CO_vs_BB', 'SB_vs_BB']);
 
 // --- Flop hand classification ---
 const HAND_CLASS_LABELS = {
     OVERPAIR:'Overpair', TOP_PAIR:'Top pair', SECOND_PAIR:'Second pair',
-    UNDERPAIR:'Underpair', SET:'Set', TWO_PAIR_PLUS:'Two pair+',
+    THIRD_PAIR:'Third pair', UNDERPAIR:'Underpair', SET:'Set', TWO_PAIR_PLUS:'Two pair+',
     OESD:'OESD', GUTSHOT:'Gutshot', NFD:'Nut flush draw',
     FD:'Flush draw', COMBO_DRAW:'Combo draw', ACE_HIGH_BACKDOOR:'Ace-high / backdoor',
-    AIR:'Air'
+    OVERCARDS:'Overcards', AIR:'Air'
 };
 
 /**
@@ -1507,31 +1507,36 @@ function classifyFlopHand(heroHand, flopCards) {
     // Count how many board cards match each hero rank
     const matchHigh = fRanks.filter(r => r === hHigh).length;
     const matchLow = fRanks.filter(r => r === hLow).length;
+    const isPocket = hHigh === hLow;
 
     // --- Made hands (strongest first) ---
 
     // Set: hero has a pocket pair that matches a board card
-    if (hHigh === hLow && matchHigh >= 1) return 'SET';
+    if (isPocket && matchHigh >= 1) return 'SET';
 
     // Two pair+: both hero ranks match board cards (and hero is not paired)
-    if (hHigh !== hLow && matchHigh >= 1 && matchLow >= 1) return 'TWO_PAIR_PLUS';
+    if (!isPocket && matchHigh >= 1 && matchLow >= 1) return 'TWO_PAIR_PLUS';
 
     // Overpair: pocket pair above the top board card
-    if (hHigh === hLow && hHigh > flopTop) return 'OVERPAIR';
+    if (isPocket && hHigh > flopTop) return 'OVERPAIR';
 
     // Top pair: one hero card matches the highest board rank
     if (matchHigh >= 1 && hHigh === flopTop) return 'TOP_PAIR';
     if (matchLow >= 1 && hLow === flopTop) return 'TOP_PAIR';
 
-    // Underpair: pocket pair below the bottom board card
-    if (hHigh === hLow && hHigh < flopBot) return 'UNDERPAIR';
-
     // Second pair: hero matches the second-highest board rank
     if (matchHigh >= 1 && hHigh === flopMid) return 'SECOND_PAIR';
     if (matchLow >= 1 && hLow === flopMid) return 'SECOND_PAIR';
 
-    // Pocket pair between board cards (not overpair, not underpair)
-    if (hHigh === hLow) return 'UNDERPAIR'; // catch-all for mid-pairs
+    // Third pair / bottom pair: hero matches the lowest board rank
+    if (matchHigh >= 1 && hHigh === flopBot) return 'THIRD_PAIR';
+    if (matchLow >= 1 && hLow === flopBot) return 'THIRD_PAIR';
+
+    // Pocket pairs that don't match the board
+    if (isPocket) {
+        if (hHigh < flopBot) return 'UNDERPAIR';
+        return 'UNDERPAIR'; // mid-pocket pairs between board cards
+    }
 
     // --- Draws ---
     const allRanks = [hHigh, hLow, ...fRanks].sort((a,b) => b - a);
@@ -1555,6 +1560,9 @@ function classifyFlopHand(heroHand, flopCards) {
     // Ace-high with backdoor equity
     if (hHigh === 14 && (hasBackdoorFD || hasGutshot)) return 'ACE_HIGH_BACKDOOR';
     if (hHigh === 14) return 'ACE_HIGH_BACKDOOR'; // Ace-high no pair still has some showdown
+
+    // Overcards: both hero cards above the top board card (no pair, no draw)
+    if (hHigh > flopTop && hLow > flopTop) return 'OVERCARDS';
 
     return 'AIR';
 }
@@ -1740,19 +1748,20 @@ const POSTFLOP_STRATEGY_V2 = {};
 
 (function() {
     const HAND_CLASSES = [
-        'OVERPAIR','TOP_PAIR','SECOND_PAIR','UNDERPAIR','SET','TWO_PAIR_PLUS',
-        'OESD','GUTSHOT','NFD','FD','COMBO_DRAW','ACE_HIGH_BACKDOOR','AIR'
+        'OVERPAIR','TOP_PAIR','SECOND_PAIR','THIRD_PAIR','UNDERPAIR','SET','TWO_PAIR_PLUS',
+        'OESD','GUTSHOT','NFD','FD','COMBO_DRAW','ACE_HIGH_BACKDOOR','OVERCARDS','AIR'
     ];
 
     // Base c-bet frequencies by hand class × board archetype (IP PFR)
     // Format: { handClass: { archetype: bet33 freq } }
     // Missing combos inherit a default per hand class.
-    const BASE = {
+    const BASE_IP = {
         SET:              { _default: 0.90, LOW_CONNECTED: 0.80, MONOTONE: 0.75, TRIPS: 0.50 },
         TWO_PAIR_PLUS:    { _default: 0.85, LOW_CONNECTED: 0.75, MONOTONE: 0.70, TRIPS: 0.50 },
         OVERPAIR:         { _default: 0.85, A_HIGH_DRY: 0.90, A_HIGH_DYNAMIC: 0.75, BROADWAY_STATIC: 0.85, BROADWAY_DYNAMIC: 0.70, MID_CONNECTED: 0.65, LOW_CONNECTED: 0.55, MONOTONE: 0.50 },
         TOP_PAIR:         { _default: 0.70, A_HIGH_DRY: 0.80, A_HIGH_DYNAMIC: 0.60, BROADWAY_STATIC: 0.75, BROADWAY_DYNAMIC: 0.55, MID_DISCONNECTED: 0.65, MID_CONNECTED: 0.50, LOW_DISCONNECTED: 0.55, LOW_CONNECTED: 0.40, MONOTONE: 0.40, PAIRED_HIGH: 0.60, PAIRED_LOW: 0.55 },
         SECOND_PAIR:      { _default: 0.35, A_HIGH_DRY: 0.45, BROADWAY_STATIC: 0.40, MID_DISCONNECTED: 0.35, MID_CONNECTED: 0.25, LOW_DISCONNECTED: 0.30, LOW_CONNECTED: 0.20, MONOTONE: 0.20 },
+        THIRD_PAIR:       { _default: 0.25, A_HIGH_DRY: 0.35, BROADWAY_STATIC: 0.30, MID_DISCONNECTED: 0.25, MID_CONNECTED: 0.15, LOW_DISCONNECTED: 0.20, LOW_CONNECTED: 0.10, MONOTONE: 0.15 },
         UNDERPAIR:        { _default: 0.30, A_HIGH_DRY: 0.40, BROADWAY_STATIC: 0.35, MID_DISCONNECTED: 0.30, MID_CONNECTED: 0.20, LOW_DISCONNECTED: 0.25, LOW_CONNECTED: 0.15, MONOTONE: 0.15 },
         COMBO_DRAW:       { _default: 0.80, A_HIGH_DRY: 0.60, BROADWAY_STATIC: 0.65, MID_CONNECTED: 0.85, LOW_CONNECTED: 0.80, MONOTONE: 0.75 },
         NFD:              { _default: 0.70, A_HIGH_DRY: 0.50, BROADWAY_STATIC: 0.55, MID_CONNECTED: 0.75, LOW_CONNECTED: 0.70, MONOTONE: 0.60 },
@@ -1760,7 +1769,27 @@ const POSTFLOP_STRATEGY_V2 = {};
         OESD:             { _default: 0.60, A_HIGH_DRY: 0.45, BROADWAY_DYNAMIC: 0.65, MID_CONNECTED: 0.65, LOW_CONNECTED: 0.60 },
         GUTSHOT:          { _default: 0.40, A_HIGH_DRY: 0.35, BROADWAY_DYNAMIC: 0.45, MID_CONNECTED: 0.45, LOW_CONNECTED: 0.40 },
         ACE_HIGH_BACKDOOR:{ _default: 0.45, A_HIGH_DRY: 0.70, A_HIGH_DYNAMIC: 0.55, BROADWAY_STATIC: 0.55, BROADWAY_DYNAMIC: 0.40, MID_DISCONNECTED: 0.40, MID_CONNECTED: 0.30, LOW_DISCONNECTED: 0.35, LOW_CONNECTED: 0.25, MONOTONE: 0.25 },
+        OVERCARDS:        { _default: 0.35, A_HIGH_DRY: 0.50, A_HIGH_DYNAMIC: 0.40, BROADWAY_STATIC: 0.45, BROADWAY_DYNAMIC: 0.35, MID_DISCONNECTED: 0.35, MID_CONNECTED: 0.20, LOW_DISCONNECTED: 0.30, LOW_CONNECTED: 0.15, MONOTONE: 0.20, PAIRED_HIGH: 0.35, PAIRED_LOW: 0.30, TRIPS: 0.25 },
         AIR:              { _default: 0.30, A_HIGH_DRY: 0.45, BROADWAY_STATIC: 0.35, MID_DISCONNECTED: 0.30, MID_CONNECTED: 0.15, LOW_DISCONNECTED: 0.25, LOW_CONNECTED: 0.10, MONOTONE: 0.15, PAIRED_HIGH: 0.30, PAIRED_LOW: 0.25, TRIPS: 0.20 }
+    };
+
+    // OOP PFR base frequencies — significantly lower c-bet frequency due to positional disadvantage
+    const BASE_OOP = {
+        SET:              { _default: 0.80, LOW_CONNECTED: 0.70, MONOTONE: 0.65, TRIPS: 0.45 },
+        TWO_PAIR_PLUS:    { _default: 0.75, LOW_CONNECTED: 0.65, MONOTONE: 0.60, TRIPS: 0.40 },
+        OVERPAIR:         { _default: 0.70, A_HIGH_DRY: 0.80, A_HIGH_DYNAMIC: 0.60, BROADWAY_STATIC: 0.70, BROADWAY_DYNAMIC: 0.55, MID_CONNECTED: 0.50, LOW_CONNECTED: 0.40, MONOTONE: 0.35 },
+        TOP_PAIR:         { _default: 0.55, A_HIGH_DRY: 0.65, A_HIGH_DYNAMIC: 0.45, BROADWAY_STATIC: 0.60, BROADWAY_DYNAMIC: 0.40, MID_DISCONNECTED: 0.50, MID_CONNECTED: 0.35, LOW_DISCONNECTED: 0.40, LOW_CONNECTED: 0.25, MONOTONE: 0.25, PAIRED_HIGH: 0.45, PAIRED_LOW: 0.40 },
+        SECOND_PAIR:      { _default: 0.20, A_HIGH_DRY: 0.30, BROADWAY_STATIC: 0.25, MID_DISCONNECTED: 0.20, MID_CONNECTED: 0.15, LOW_DISCONNECTED: 0.20, LOW_CONNECTED: 0.10, MONOTONE: 0.10 },
+        THIRD_PAIR:       { _default: 0.15, A_HIGH_DRY: 0.20, BROADWAY_STATIC: 0.18, MID_DISCONNECTED: 0.15, MID_CONNECTED: 0.10, LOW_DISCONNECTED: 0.12, LOW_CONNECTED: 0.08, MONOTONE: 0.08 },
+        UNDERPAIR:        { _default: 0.18, A_HIGH_DRY: 0.25, BROADWAY_STATIC: 0.22, MID_DISCONNECTED: 0.18, MID_CONNECTED: 0.12, LOW_DISCONNECTED: 0.15, LOW_CONNECTED: 0.08, MONOTONE: 0.08 },
+        COMBO_DRAW:       { _default: 0.65, A_HIGH_DRY: 0.45, BROADWAY_STATIC: 0.50, MID_CONNECTED: 0.70, LOW_CONNECTED: 0.65, MONOTONE: 0.55 },
+        NFD:              { _default: 0.55, A_HIGH_DRY: 0.35, BROADWAY_STATIC: 0.40, MID_CONNECTED: 0.60, LOW_CONNECTED: 0.55, MONOTONE: 0.45 },
+        FD:               { _default: 0.40, A_HIGH_DRY: 0.25, BROADWAY_STATIC: 0.30, MID_CONNECTED: 0.45, LOW_CONNECTED: 0.40, MONOTONE: 0.30 },
+        OESD:             { _default: 0.45, A_HIGH_DRY: 0.30, BROADWAY_DYNAMIC: 0.50, MID_CONNECTED: 0.50, LOW_CONNECTED: 0.45 },
+        GUTSHOT:          { _default: 0.25, A_HIGH_DRY: 0.20, BROADWAY_DYNAMIC: 0.30, MID_CONNECTED: 0.30, LOW_CONNECTED: 0.25 },
+        ACE_HIGH_BACKDOOR:{ _default: 0.30, A_HIGH_DRY: 0.50, A_HIGH_DYNAMIC: 0.35, BROADWAY_STATIC: 0.35, BROADWAY_DYNAMIC: 0.25, MID_DISCONNECTED: 0.25, MID_CONNECTED: 0.15, LOW_DISCONNECTED: 0.20, LOW_CONNECTED: 0.12, MONOTONE: 0.12 },
+        OVERCARDS:        { _default: 0.22, A_HIGH_DRY: 0.35, A_HIGH_DYNAMIC: 0.25, BROADWAY_STATIC: 0.28, BROADWAY_DYNAMIC: 0.20, MID_DISCONNECTED: 0.20, MID_CONNECTED: 0.10, LOW_DISCONNECTED: 0.18, LOW_CONNECTED: 0.08, MONOTONE: 0.10, PAIRED_HIGH: 0.22, PAIRED_LOW: 0.18, TRIPS: 0.15 },
+        AIR:              { _default: 0.18, A_HIGH_DRY: 0.30, BROADWAY_STATIC: 0.22, MID_DISCONNECTED: 0.18, MID_CONNECTED: 0.08, LOW_DISCONNECTED: 0.15, LOW_CONNECTED: 0.05, MONOTONE: 0.08, PAIRED_HIGH: 0.18, PAIRED_LOW: 0.15, TRIPS: 0.12 }
     };
 
     // Reasoning templates per hand class
@@ -1770,6 +1799,7 @@ const POSTFLOP_STRATEGY_V2 = {};
         OVERPAIR: 'Overpairs are premium made hands; bet for value and protection.',
         TOP_PAIR: 'Top pair should usually bet for value, but check on dynamic boards.',
         SECOND_PAIR: 'Second pair has showdown value; check to control pot, or thin value bet on dry boards.',
+        THIRD_PAIR: 'Third pair is weak; mostly check to get to showdown cheaply.',
         UNDERPAIR: 'Underpairs are marginal; mostly check to realize equity.',
         COMBO_DRAW: 'Combo draws have great equity and fold equity; bet aggressively.',
         NFD: 'Nut flush draws have strong equity; semi-bluff frequently.',
@@ -1777,20 +1807,24 @@ const POSTFLOP_STRATEGY_V2 = {};
         OESD: 'Open-ended straight draws have ~32% equity; semi-bluff on many textures.',
         GUTSHOT: 'Gutshots have some equity but low hit rate; selective bluffs.',
         ACE_HIGH_BACKDOOR: 'Ace-high with backdoor equity; can bet on favorable textures as a bluff.',
+        OVERCARDS: 'Two overcards have some equity and can improve; bet as a bluff on PFR-favorable boards.',
         AIR: 'No made hand or draw; bet as a bluff on PFR-favorable boards, check otherwise.'
     };
 
-    // Small family offset (CO slightly tighter than BTN)
-    const FAMILY_OFF = { BTN_vs_BB: 0, CO_vs_BB: -0.03 };
+    // Family offsets: small adjustments per family
+    // CO is slightly tighter than BTN; SB is handled via OOP base tables
+    const FAMILY_OFF = { BTN_vs_BB: 0, CO_vs_BB: -0.03, SB_vs_BB: 0 };
 
     for (const fam of HERO_HAND_AWARE_FAMILIES) {
         const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
         if (!fi) continue;
         const famOff = FAMILY_OFF[fam] || 0;
+        // Use OOP base tables for OOP families, IP for IP families
+        const baseTable = fi.positionState === 'OOP' ? BASE_OOP : BASE_IP;
 
         for (const arch of FLOP_ARCHETYPES) {
             for (const hc of HAND_CLASSES) {
-                const baseFreqs = BASE[hc];
+                const baseFreqs = baseTable[hc];
                 if (!baseFreqs) continue;
                 const raw = baseFreqs[arch] !== undefined ? baseFreqs[arch] : baseFreqs._default;
                 const bet = Math.max(0.05, Math.min(0.95, parseFloat((raw + famOff).toFixed(2))));
@@ -1805,14 +1839,14 @@ const POSTFLOP_STRATEGY_V2 = {};
                     actions: { check: chk, bet33: bet },
                     preferredAction: preferred,
                     reasoning: REASONING[hc] || '',
-                    simplification: 'Phase 2: Hero-hand-aware C-Bet'
+                    simplification: 'V3: Hero-hand-aware C-Bet'
                 };
             }
         }
     }
 
     if (window.RANGE_VALIDATE) {
-        console.log(`[PostflopV2] Built ${Object.keys(POSTFLOP_STRATEGY_V2).length} hero-hand-aware strategy entries.`);
+        console.log(`[PostflopV3] Built ${Object.keys(POSTFLOP_STRATEGY_V2).length} hero-hand-aware strategy entries.`);
     }
 })();
 const ARCHETYPE_LABELS={A_HIGH_DRY:'A-high dry',A_HIGH_DYNAMIC:'A-high dynamic',BROADWAY_STATIC:'Broadway static',BROADWAY_DYNAMIC:'Broadway dynamic',MID_DISCONNECTED:'Mid disconnected',MID_CONNECTED:'Mid connected',LOW_DISCONNECTED:'Low disconnected',LOW_CONNECTED:'Low connected',PAIRED_HIGH:'Paired high',PAIRED_LOW:'Paired low',MONOTONE:'Monotone',TRIPS:'Trips'};
