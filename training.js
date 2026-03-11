@@ -2027,7 +2027,17 @@ function generateNextRound() {
             state.oppPos = '';
         } else if (state.scenario === 'POSTFLOP_CBET') {
             // Postflop: generate spot, store in state.postflop, skip normal hand sampling
-            const pfFamFilter = state.config.postflopFamilies || null;
+            // Build family filter: use explicit postflopFamilies if set (challenge nodes),
+            // otherwise filter HERO_HAND_AWARE_FAMILIES by the user's selected hero positions.
+            let pfFamFilter = state.config.postflopFamilies || null;
+            if (!pfFamFilter && state.config.positions && state.config.positions.length > 0) {
+                const posSet = new Set(state.config.positions);
+                pfFamFilter = [...HERO_HAND_AWARE_FAMILIES].filter(fam => {
+                    const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+                    return fi && posSet.has(fi.heroPos);
+                });
+                if (pfFamFilter.length === 0) pfFamFilter = null; // fallback to all
+            }
             const spot = generatePostflopSpot(20, pfFamFilter);
             state.postflop = spot;
             state.currentPos = spot.heroPos;
