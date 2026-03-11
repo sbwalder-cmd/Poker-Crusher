@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Poker Crusher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
+        .poker-felt {
+            background: radial-gradient(ellipse at center, #1e293b 0%, #0f172a 100%);
+            border: 12px solid #1e293b;
+            border-radius: 999px;
+            box-shadow: inset 0 0 40px rgba(0,0,0,0.6), 0 20px 40px -10px rgba(0,0,0,0.5);
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+        }
+        
+        .seat { 
+            position: absolute;
+            transform: translate(-50%, -50%) translateZ(0);
+            transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), 
+                        top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), 
+                        transform 0.3s ease; 
+            z-index: 20;
+            width: var(--seat-w, 48px);
+            height: var(--seat-h, 32px);
+            font-size: var(--seat-font, 10px);
+            will-change: transform;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+        }
+        .seat-active {
+            transform: translate(-50%, -50%) scale(1.15) translateY(-4px) translateZ(0);
+        }
+        .sq-bluff-stripe {
+            background: repeating-linear-gradient(
+                -45deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.35) 2px,
+                rgba(0,0,0,0.35) 4px
+            );
+            border-color: #818cf8;
+            box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.5);
+            background-color: #3730a3;
+            color: #ffffff;
+            z-index: 30;
+        }
+        
+        @keyframes pulse-active {
+            0% { box-shadow: 0 0 0 0px rgba(99, 102, 241, 0.3); }
+            70% { box-shadow: 0 0 0 15px rgba(99, 102, 241, 0); }
+            100% { box-shadow: 0 0 0 0px rgba(99, 102, 241, 0); }
+        }
+        .pulse { animation: pulse-active 2.5s infinite; }
+        .hidden { display: none !important; }
+        
+        .card-display {
+            background: linear-gradient(145deg, #ffffff, #e2e8f0);
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .range-grid {
+            display: grid;
+            grid-template-columns: repeat(13, 1fr);
+            gap: 1px;
+        }
+
+        .config-btn {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            color: #94a3b8;
+            transition: all 0.2s;
+        }
+        .config-btn.selected {
+            background-color: #4f46e5;
+            border-color: #818cf8;
+            color: white;
+        }
+        .config-btn.selected-gold {
+            background-color: #854d0e;
+            border-color: #ca8a04;
+            color: #fef08a;
+        }
+        .mode-tab {
+            flex: 1;
+            padding: 10px 0;
+            font-weight: 800;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border-radius: 10px;
+            transition: all 0.2s;
+            background: transparent;
+            color: #64748b;
+            border: 1px solid transparent;
+        }
+        .mode-tab.active {
+            background: #1e293b;
+            color: white;
+            border-color: #334155;
+        }
+        .count-btn {
+            padding: 10px 0;
+            font-weight: 900;
+            font-size: 14px;
+            border-radius: 10px;
+            transition: all 0.2s;
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: #64748b;
+        }
+        .count-btn.selected {
+            background: #4f46e5;
+            border-color: #818cf8;
+            color: white;
+        }
+        @keyframes medal-pop {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .medal-pop { animation: medal-pop 0.5s ease-out forwards; }
+
+        .scroll-hide::-webkit-scrollbar { display: none; }
+
+        /* === TABLE ANIMATION STYLES === */
+        .seat-cards {
+            position: absolute;
+            display: flex;
+            gap: 2px;
+            pointer-events: none;
+            z-index: 25;
+            transition: opacity 0.3s ease;
+            will-change: transform, opacity;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+        }
+        .card-back {
+            width: var(--cb-w, 10px);
+            height: var(--cb-h, 14px);
+            border-radius: 2px;
+            background: linear-gradient(135deg, #312e81 0%, #1e1b4b 50%, #312e81 100%);
+            border: 1px solid rgba(255,255,255,0.25);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+            will-change: transform;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+        }
+        .card-back::after {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            border-radius: 1px;
+            border: 1px solid rgba(99,102,241,0.4);
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 2px,
+                rgba(99,102,241,0.1) 2px,
+                rgba(99,102,241,0.1) 4px
+            );
+        }
+        @keyframes deal-card {
+            0% { opacity: 0; transform: scale(0.3) translateY(-8px); }
+            60% { transform: scale(1.15) translateY(1px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .card-back.dealing {
+            animation: deal-card 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        /* Hero card flip system */
+        .hero-card-wrapper {
+            perspective: 600px;
+            display: inline-block;
+            will-change: transform;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+        }
+        .hero-card-inner {
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.4s cubic-bezier(0.34, 1.2, 0.64, 1);
+        }
+        .hero-card-inner.flipped {
+            transform: rotateY(180deg);
+        }
+        .hero-card-front, .hero-card-back-face {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .hero-card-back-face {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #312e81 0%, #1e1b4b 50%, #312e81 100%);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .hero-card-back-face::after {
+            content: '';
+            position: absolute;
+            inset: 4px;
+            border-radius: 4px;
+            border: 1.5px solid rgba(99,102,241,0.35);
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 4px,
+                rgba(99,102,241,0.08) 4px,
+                rgba(99,102,241,0.08) 8px
+            );
+        }
+        .hero-card-front {
+            transform: rotateY(180deg);
+        }
+
+        /* Action buttons reveal */
+        .action-buttons-hidden button {
+            opacity: 0.15;
+            pointer-events: none;
+            transform: scale(0.97);
+        }
+        .action-buttons-revealed button {
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+            transition: opacity 0.3s ease 0.15s, transform 0.3s cubic-bezier(0.34, 1.2, 0.64, 1) 0.15s;
+        }
+
+        /* Feedback toast */
+        @keyframes toast-in {
+            0% { opacity: 0; transform: translateY(6px) scale(0.95); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        /* Community card deal animation */
+        @keyframes ccDeal {
+            0% { opacity: 0; transform: scale(0.7) translateY(-10px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes toast-out {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-4px) scale(0.97); }
+        }
+        .toast {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            border-radius: 10px;
+            animation: toast-in 0.25s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
+        }
+        .toast.leaving {
+            animation: toast-out 0.2s ease forwards;
+        }
+        .toast-correct {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #6ee7b7;
+        }
+        .toast-incorrect {
+            background: rgba(244, 63, 94, 0.15);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            color: #fda4af;
+        }
+        @keyframes miss-flash {
+            0%   { opacity: 0; }
+            20%  { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        #miss-flash-overlay {
+            pointer-events: none;
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(220, 38, 38, 0.5);
+            display: none;
+        }
+        #miss-flash-overlay.active {
+            display: block;
+            animation: miss-flash 0.7s ease-out forwards;
+        }
+        @keyframes fold-cards {
+            0% { opacity: 1; transform: scale(1) translateY(0) rotate(0deg); }
+            100% { opacity: 0; transform: scale(0.5) translateY(6px) rotate(15deg); }
+        }
+        .seat-cards.folding {
+            animation: fold-cards 0.3s ease-in forwards;
+        }
+        @keyframes chip-fly {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        .chip-anim {
+            animation: chip-fly 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        @keyframes action-badge-in {
+            0% { opacity: 0; transform: translateY(-6px) scale(0.7); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .action-badge {
+            font-size: var(--badge-font, 8px);
+            font-weight: 900;
+            padding: var(--badge-py, 1px) var(--badge-px, 4px);
+            border-radius: var(--badge-radius, 4px);
+            white-space: nowrap;
+            animation: action-badge-in 0.2s ease forwards;
+            pointer-events: none;
+        }
+        .badge-fold { background: #1e293b; color: #64748b; border: 1px solid #334155; }
+        .badge-raise { background: #3730a3; color: #a5b4fc; border: 1px solid #4f46e5; }
+        .badge-call { background: #065f46; color: #6ee7b7; border: 1px solid #059669; }
+        .badge-3bet { background: #4c1d95; color: #ddd6fe; border: 1px solid #7c3aed; }
+        .badge-blind { background: #78350f; color: #fcd34d; border: 1px solid #d97706; }
+        .badge-limp { background: #164e63; color: #67e8f9; border: 1px solid #0891b2; }
+        .badge-iso { background: #7c2d12; color: #fdba74; border: 1px solid #ea580c; }
+        .seat-folded-state {
+            opacity: 0.35;
+            filter: grayscale(0.5);
+            transition: opacity 0.3s ease, filter 0.3s ease;
+        }
+
+        /* === SESSION LOG & DRILL-DOWN === */
+        @keyframes slide-up {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        @keyframes slide-in-right {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .panel-slide-up { animation: slide-up 0.28s cubic-bezier(0.34,1.2,0.64,1) forwards; }
+        .panel-slide-right { animation: slide-in-right 0.25s ease forwards; }
+        .log-row-correct { border-left: 3px solid #10b981; }
+        .log-row-incorrect { border-left: 3px solid #f43f5e; }
+        .drilldown-hand-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 2px;
+            font-size: 5px;
+            font-weight: 900;
+            cursor: default;
+            position: relative;
+        }
+    
+        /* Hero bet slide animation (visual only) */
+        .hero-bet-anim {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 60;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            transition: left 260ms ease-out, top 260ms ease-out, opacity 260ms ease-out;
+            opacity: 0.0;
+        }
+        .hero-bet-anim.show { opacity: 1.0; }
+
+</style>
+
+    <!-- Cloud Sync: Firebase loaded via modular SDK at end of body -->
+
+</head>
+<body class="bg-slate-950 text-slate-100 h-[100dvh] flex flex-col items-center overflow-hidden font-sans">
+    <div id="miss-flash-overlay"></div>
+    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex justify-center pointer-events-none px-4"></div>
+
+    <!-- MENU SCREEN -->
+    <div id="menu-screen" class="w-full max-w-md p-6 flex flex-col items-center justify-center h-full gap-5 text-center z-10">
+        <div class="mb-1">
+            <h1 class="text-5xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-indigo-300 to-indigo-600">Poker Crusher</h1>
+            <p class="text-indigo-400/80 text-[11px] font-bold uppercase tracking-[0.3em] mt-2"></p>
+        </div>
+
+        <!-- Mastery dashboard card -->
+        <div id="menu-dashboard" class="w-full bg-slate-900/40 backdrop-blur-md border border-slate-700/50 rounded-3xl p-5 shadow-2xl">
+            <!-- Injected by updateMenuUI -->
+        </div>
+
+        <!-- Onboarding card: hidden once user has 50+ hands -->
+        <div id="menu-onboarding" class="hidden w-full bg-indigo-950/40 border border-indigo-700/30 rounded-2xl px-4 py-3 text-left">
+            <p class="text-indigo-300 font-black text-xs uppercase tracking-widest mb-2">Getting started</p>
+            <div class="flex flex-col gap-1.5 text-[11px] text-slate-400 leading-snug">
+                <div class="flex gap-2"><span class="text-indigo-400 font-black shrink-0">1.</span><span><span class="text-slate-200 font-bold">TRAIN NOW</span> — free practice. Pick your scenarios and go.</span></div>
+                <div class="flex gap-2"><span class="text-indigo-400 font-black shrink-0">2.</span><span><span class="text-slate-200 font-bold">DAILY RUN</span> — one shot per difficulty per day. Score = correct answers in a row.</span></div>
+                <div class="flex gap-2"><span class="text-indigo-400 font-black shrink-0">3.</span><span><span class="text-slate-200 font-bold">REVIEW</span> — hands you've missed come back on a schedule. Check it daily.</span></div>
+            </div>
+            <button onclick="dismissOnboarding()" class="mt-2 text-[9px] text-slate-600 hover:text-slate-400 font-bold uppercase tracking-wider">Dismiss</button>
+        </div>
+
+        <div class="w-full flex flex-col gap-3">
+            <button onclick="showConfigMenu()" class="w-full py-5 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-2xl font-black text-xl transition-all shadow-lg">
+                TRAIN NOW
+            </button>
+
+            <button onclick="showDailyRunMenu()" class="w-full py-4 bg-indigo-700/90 hover:bg-indigo-600 active:scale-[0.98] rounded-2xl font-black text-base transition-all shadow-lg flex items-center justify-center gap-2">
+                <span>🔥</span><span>DAILY RUN</span>
+            </button>
+
+            <button onclick="showChallengeMenu()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] rounded-2xl font-black text-base transition-all shadow-lg flex items-center justify-center gap-2">
+                <span>🏆</span><span>CHALLENGE MODE</span>
+            </button>
+            <button onclick="showLibrary()" class="w-full py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-bold text-slate-300 transition-all flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+                STRATEGY LIBRARY
+            </button>
+            <div class="grid grid-cols-2 gap-3">
+                <button onclick="showReviewPreview()" id="menu-review-btn" class="py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-bold text-slate-300 transition-all flex items-center justify-center gap-2 text-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></svg>
+                    REVIEW <span id="menu-due-badge" class="hidden text-[10px] font-black bg-amber-500/20 text-amber-400 rounded-full px-1.5 py-0.5"></span>
+                    <span id="menu-due-zero" class="text-[10px] text-slate-600 font-normal">(0 due)</span>
+                </button>
+                <button onclick="showUserStats()" class="py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-bold text-slate-300 transition-all flex items-center justify-center gap-2 text-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                    MY STATS
+                </button>
+                <button onclick="showSettings()" class="py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-bold text-slate-300 transition-all flex items-center justify-center gap-2 text-sm col-span-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v2"/><path d="M12 21v2"/><path d="M4.22 4.22l1.42 1.42"/><path d="M18.36 18.36l1.42 1.42"/><path d="M1 12h2"/><path d="M21 12h2"/><path d="M4.22 19.78l1.42-1.42"/><path d="M18.36 5.64l1.42-1.42"/><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.24.5.36 1.05.36 1.62v.76c0 .57-.12 1.12-.36 1.62Z"/></svg>
+                    SETTINGS
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- CHALLENGE SCREEN -->
+    <div id="challenge-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-start overflow-y-auto">
+        <div class="w-full max-w-sm flex flex-col gap-5 pt-6 pb-12">
+            <div class="flex items-center justify-between">
+                <div class="text-left">
+                    <p class="text-[10px] text-emerald-400/80 font-bold uppercase tracking-[0.25em]">Challenge Path</p>
+                    <h2 class="text-2xl font-black tracking-tight">Campaign</h2>
+                </div>
+                <button onclick="closeChallengeMenu()" class="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold">Back</button>
+            </div>
+
+            <div class="bg-slate-900/40 border border-slate-800 rounded-2xl p-4">
+                <p class="text-[10px] text-slate-400 font-bold">How it works</p>
+                <p class="text-[11px] text-slate-500 mt-1 leading-snug">
+                    Beat each node by hitting the accuracy target. Earn Pass, Silver, or Gold medals. Completing nodes unlocks the next ones. Beat the Boss to become a Poker Crusher champion.
+                </p>
+            </div>
+            <div id="challenge-complete-banner" class="hidden bg-emerald-900/30 border border-emerald-700/40 rounded-2xl p-5 text-center">
+                <div class="text-3xl mb-2">&#127942;</div>
+                <div class="text-emerald-300 font-black text-base">Challenge Path Complete!</div>
+                <div class="text-emerald-500/80 text-[12px] mt-1 leading-snug">You've conquered every node. You're a certified Poker Crusher.</div>
+            </div>
+
+            <div id="challenge-body" class="flex flex-col gap-2"></div>
+
+            <div class="pt-2">
+                <button onclick="resetChallengeProgress()" class="w-full py-3 bg-slate-900 border border-slate-800 rounded-2xl font-bold text-xs text-slate-500">
+                    Reset Challenge Progress
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LIBRARY SCREEN -->
+    <div id="library-screen" class="hidden fixed inset-0 bg-slate-950 z-[60] flex flex-col overflow-hidden">
+
+        <!-- Fixed header: title + close -->
+        <div class="shrink-0 px-5 pt-5 pb-3 border-b border-white/5 flex justify-between items-center">
+            <h2 class="text-xl font-black">GTO Library</h2>
+            <button onclick="hideLibrary()" class="p-2 bg-slate-900 rounded-lg text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+
+        <!-- Fixed control strip: category tabs + spot pickers -->
+        <div class="shrink-0 bg-slate-950 border-b border-white/5 px-4 pt-3 pb-2 flex flex-col gap-2">
+            <!-- Row 1: scenario category tabs -->
+            <div id="lib-nav" class="flex gap-1.5 overflow-x-auto scroll-hide pb-1">
+                <button id="lib-tab-RFI" onclick="setLibCategory('RFI')" class="whitespace-nowrap px-4 py-1.5 rounded-full font-bold text-xs bg-indigo-600 text-white">RFI</button>
+                <button id="lib-tab-FACING_RFI" onclick="setLibCategory('FACING_RFI')" class="whitespace-nowrap px-4 py-1.5 rounded-full font-bold text-xs bg-slate-800 text-slate-400">Defending vs RFI</button>
+                <button id="lib-tab-RFI_VS_3BET" onclick="setLibCategory('RFI_VS_3BET')" class="whitespace-nowrap px-4 py-1.5 rounded-full font-bold text-xs bg-slate-800 text-slate-400">vs 3-Bet</button>
+                <button id="lib-tab-VS_LIMP" onclick="setLibCategory('VS_LIMP')" class="whitespace-nowrap px-4 py-1.5 rounded-full font-bold text-xs bg-slate-800 text-slate-400">vs Limpers</button>
+                <button id="lib-tab-SQUEEZE" onclick="setLibCategory('SQUEEZE')" class="whitespace-nowrap px-4 py-1.5 rounded-full font-bold text-xs bg-slate-800 text-slate-400">Squeeze</button>
+                <button id="lib-tab-SQUEEZE_2C" onclick="setLibCategory('SQUEEZE_2C')" class="whitespace-nowrap px-4 py-1.5 rounded-full font-bold text-xs bg-slate-800 text-slate-400">Squeeze 2C</button>
+                <button id="lib-tab-POSTFLOP" onclick="setLibCategory('POSTFLOP')" class="whitespace-nowrap px-4 py-1.5 rounded-full font-bold text-xs bg-slate-800 text-slate-400">Postflop</button>
+            </div>
+            <!-- Row 2: hero position picker (always shown) -->
+            <div id="lib-hero-row" class="flex gap-1.5 overflow-x-auto scroll-hide pb-1"></div>
+            <!-- Row 3: opponent picker (shown for multi-spot categories) -->
+            <div id="lib-opp-row" class="flex gap-1.5 overflow-x-auto scroll-hide pb-1 hidden"></div>
+            <!-- Row 4: bucket picker for VS_LIMP -->
+            <div id="lib-bucket-row" class="flex gap-1.5 overflow-x-auto scroll-hide pb-1 hidden"></div>
+            <!-- Row 2b: postflop position state (IP/OOP) -->
+            <div id="lib-pf-posstate-row" class="flex gap-1.5 overflow-x-auto scroll-hide pb-1 hidden"></div>
+            <!-- Row 3b: postflop family row -->
+            <div id="lib-pf-family-row" class="flex gap-1.5 overflow-x-auto scroll-hide pb-1 hidden"></div>
+            <!-- Row 4b: postflop view mode row -->
+            <div id="lib-pf-view-row" class="flex gap-1.5 overflow-x-auto scroll-hide pb-1 hidden"></div>
+        </div>
+
+        <!-- Scrollable chart area -->
+        <div class="flex-1 overflow-y-auto scroll-hide">
+            <div id="lib-chart-area" class="flex flex-col items-center px-4 py-5 gap-4">
+                <!-- Injected by renderLibraryChart() -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- REVIEW COMPLETE SCREEN -->
+    <div id="review-complete-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-50 flex flex-col items-center justify-center p-6">
+        <div class="w-full max-w-sm flex flex-col gap-5">
+            <div class="text-center">
+                <p class="text-[10px] text-amber-400/80 font-bold uppercase tracking-[0.25em] mb-1">Review Complete</p>
+                <h2 class="text-2xl font-black tracking-tight">Session done</h2>
+            </div>
+            <div class="bg-slate-900/60 border border-slate-700/40 rounded-2xl p-5">
+                <div class="grid grid-cols-2 gap-4 text-center mb-4">
+                    <div>
+                        <div id="rc-hands" class="text-3xl font-black text-slate-100">0</div>
+                        <div class="text-slate-500 text-[9px] font-bold uppercase tracking-wider mt-0.5">Hands reviewed</div>
+                    </div>
+                    <div>
+                        <div id="rc-accuracy" class="text-4xl font-black text-emerald-400">0%</div>
+                        <div class="text-slate-500 text-[9px] font-bold uppercase tracking-wider mt-0.5">Accuracy</div>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-2">Still needs work</p>
+                    <div id="rc-wrong-rows"></div>
+                </div>
+            </div>
+            <button onclick="closeReviewComplete()" class="w-full py-4 bg-amber-600 hover:bg-amber-500 active:scale-[0.98] rounded-2xl font-black text-lg transition-all">Back to Menu</button>
+        </div>
+    </div>
+
+    <!-- SESSION SUMMARY SCREEN -->
+    <div id="session-summary-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-50 flex flex-col items-center justify-center p-6">
+        <div class="w-full max-w-sm flex flex-col gap-5">
+            <div class="text-center">
+                <p class="text-[10px] text-indigo-400/80 font-bold uppercase tracking-[0.25em] mb-1">Session Complete</p>
+                <h2 class="text-2xl font-black tracking-tight">Nice work</h2>
+            </div>
+            <div class="bg-slate-900/60 border border-slate-700/40 rounded-2xl p-5">
+                <div class="grid grid-cols-3 gap-4 text-center mb-4">
+                    <div>
+                        <div id="ss-hands" class="text-3xl font-black text-slate-100">0</div>
+                        <div class="text-slate-500 text-[9px] font-bold uppercase tracking-wider mt-0.5">Hands</div>
+                    </div>
+                    <div>
+                        <div id="ss-accuracy" class="text-4xl font-black text-emerald-400">0%</div>
+                        <div class="text-slate-500 text-[9px] font-bold uppercase tracking-wider mt-0.5">Accuracy</div>
+                    </div>
+                    <div>
+                        <div id="ss-streak" class="text-3xl font-black text-orange-400">0</div>
+                        <div class="text-slate-500 text-[9px] font-bold uppercase tracking-wider mt-0.5">Best Streak</div>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-2">This session by spot</p>
+                    <div id="ss-spot-rows"></div>
+                </div>
+            </div>
+            <button onclick="closeSessionSummary()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-2xl font-black text-lg transition-all">Back to Menu</button>
+        </div>
+    </div>
+
+    <!-- REVIEW PREVIEW SCREEN -->
+    <div id="review-preview-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-50 flex flex-col items-center justify-center p-6">
+        <div class="w-full max-w-sm flex flex-col gap-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] text-amber-400/80 font-bold uppercase tracking-[0.25em]">Spaced Repetition</p>
+                    <h2 class="text-2xl font-black tracking-tight">Today's Review</h2>
+                </div>
+                <button onclick="hideReviewPreview()" class="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold">Back</button>
+            </div>
+
+            <!-- Session summary card -->
+            <div class="bg-slate-900/60 border border-slate-700/40 rounded-2xl p-5 flex flex-col gap-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div id="review-count-label" class="text-3xl font-black text-amber-400">—</div>
+                        <div class="text-slate-400 text-xs font-bold mt-0.5">hands in this session</div>
+                    </div>
+                    <div class="text-right">
+                        <div id="review-overdue-label" class="text-lg font-black text-slate-300">—</div>
+                        <div class="text-slate-500 text-[10px] font-bold mt-0.5">total overdue</div>
+                    </div>
+                </div>
+                <!-- Top weak spots -->
+                <div>
+                    <p class="text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-2">Focus spots</p>
+                    <div id="review-spot-list" class="flex flex-col gap-1.5"></div>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/40 border border-slate-800/40 rounded-xl px-4 py-3 text-[11px] text-slate-500 leading-relaxed">
+                You have a daily cap of <span class="text-slate-300 font-bold">20 review hands</span>. The most overdue and weakest spots are picked first. Come back tomorrow for the next batch.
+            </div>
+
+            <button onclick="launchReviewSession()" class="w-full py-5 bg-amber-600 hover:bg-amber-500 active:scale-[0.98] rounded-2xl font-black text-xl transition-all shadow-lg">
+                START REVIEW
+            </button>
+        </div>
+    </div>
+
+    <!-- USER STATS SCREEN -->
+    <div id="stats-screen" class="hidden fixed inset-0 bg-slate-950 z-[60] flex flex-col overflow-hidden">
+        <div class="p-6 border-b border-white/5 flex justify-between items-center shrink-0">
+            <h2 class="text-2xl font-black">My Stats</h2>
+            <button onclick="hideUserStats()" class="p-2 bg-slate-900 rounded-lg text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+        <div id="stats-body" class="flex-1 overflow-y-auto p-6 scroll-hide flex flex-col gap-5">
+            <!-- All content injected by renderUserStats -->
+        </div>
+    </div>
+
+    
+    <!-- DAILY RUN SCREEN -->
+    <div id="daily-run-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl flex flex-col items-center justify-start overflow-y-auto z-40">
+        <div class="w-full max-w-md p-6 flex flex-col gap-5">
+            <div class="flex items-center justify-between">
+                <button onclick="showMenu()" class="px-4 py-2 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-xl font-bold text-slate-300 text-sm">← Back</button>
+                <div class="text-right">
+                    <div class="text-slate-200 font-black text-lg">Daily Run</div>
+                    <div id="daily-run-subtitle" class="text-slate-400 text-xs font-semibold">One shot per difficulty per day</div>
+                </div>
+            </div>
+
+            <div id="daily-run-status" class="w-full bg-slate-900/40 backdrop-blur-md border border-slate-700/50 rounded-3xl p-5 shadow-2xl">
+                <!-- Injected by updateDailyRunUI -->
+            </div>
+
+            <div class="grid grid-cols-1 gap-3">
+                <button onclick="startDailyRun('easy')" id="daily-run-btn-easy" class="w-full py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-between px-5">
+                    <span class="flex items-center gap-3"><span class="text-lg">🟢</span><span>Warm‑Up</span></span>
+                    <span class="flex flex-col items-end gap-0.5"><span class="text-slate-400 text-sm font-bold">Easy spots</span><span class="dr-btn-best hidden text-[9px] font-bold text-emerald-400/80"></span></span>
+                </button>
+                <button onclick="startDailyRun('medium')" id="daily-run-btn-medium" class="w-full py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-between px-5">
+                    <span class="flex items-center gap-3"><span class="text-lg">🟡</span><span>Grind</span></span>
+                    <span class="flex flex-col items-end gap-0.5"><span class="text-slate-400 text-sm font-bold">Mixed spots</span><span class="dr-btn-best hidden text-[9px] font-bold text-yellow-400/80"></span></span>
+                </button>
+                <button onclick="startDailyRun('hard')" id="daily-run-btn-hard" class="w-full py-4 bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-between px-5">
+                    <span class="flex items-center gap-3"><span class="text-lg">🔴</span><span>Boss</span></span>
+                    <span class="flex flex-col items-end gap-0.5"><span class="text-slate-400 text-sm font-bold">Hard spots</span><span class="dr-btn-best hidden text-[9px] font-bold text-rose-400/80"></span></span>
+                </button>
+            </div>
+
+            <div class="bg-slate-900/60 border border-slate-700/40 rounded-2xl px-4 py-3 text-slate-400 text-[12px] leading-relaxed">
+                <span class="text-slate-200 font-black">How it works:</span> Answer hand-by-hand. Your <span class="text-orange-400 font-bold">score = correct answers in a row</span>. Your first wrong answer ends the run. Pick a difficulty and go.
+            </div>
+        </div>
+    </div>
+
+    <!-- DAILY RUN COMPLETE MODAL -->
+    <div id="daily-run-complete-screen" class="hidden fixed inset-0 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center z-50 p-6">
+        <div class="w-full max-w-md bg-slate-900/50 border border-slate-700/50 rounded-3xl p-6 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <div class="text-slate-100 font-black text-xl">Daily Run Complete</div>
+                <div id="daily-run-complete-badge" class="text-xs font-black px-3 py-1 rounded-full bg-indigo-600/30 text-indigo-200 border border-indigo-500/30">DONE</div>
+            </div>
+            <div id="daily-run-complete-body" class="mt-4"></div>
+            <div class="mt-5 flex flex-col gap-3">
+                <button id="dr-play-again-btn" onclick="drPlayAgain()" class="w-full py-4 bg-orange-600 hover:bg-orange-500 active:scale-[0.98] rounded-2xl font-black text-base transition-all shadow-lg">Play Again</button>
+                <button onclick="endDailyRunToMenu()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] rounded-2xl font-black text-base transition-all shadow-lg">Main Menu</button>
+            </div>
+        </div>
+    </div>
+
+<!-- CONFIGURATION SCREEN -->
+    <div id="config-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-start overflow-y-auto">
+        <div class="w-full max-w-sm flex flex-col gap-6 pt-6 pb-12">
+            <!-- Mode Tabs -->
+            <div class="flex gap-2 bg-slate-900/50 p-1 rounded-xl">
+                <button onclick="setDrillMode('open')" id="mode-open" class="mode-tab active">Open Training</button>
+                <button onclick="setDrillMode('focused')" id="mode-focused" class="mode-tab">Focused Drill</button>
+            </div>
+            <div id="mode-desc" class="text-[11px] text-slate-500 text-center -mt-3 px-2">Mix scenarios &amp; positions — great for general practice.</div>
+
+            <!-- Open Training Options -->
+            <div id="config-open" class="flex flex-col gap-6">
+                <div>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 ml-1">Scenarios</p>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button onclick="toggleConfig('scenario', 'RFI')" id="cfg-RFI" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center">RFI (Unopened) <span>✓</span></button>
+                        <button onclick="toggleConfig('scenario', 'FACING_RFI')" id="cfg-FACING_RFI" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center">Defending vs RFI <span>✓</span></button>
+                        <button onclick="toggleConfig('scenario', 'RFI_VS_3BET')" id="cfg-RFI_VS_3BET" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center">vs 3-Bet Situations <span>✓</span></button>
+                        <button onclick="toggleConfig('scenario', 'VS_LIMP')" id="cfg-VS_LIMP" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center">Vs Limpers (1–3+) <span>✓</span></button>
+                        <button onclick="toggleConfig('scenario', 'SQUEEZE')" id="cfg-SQUEEZE" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center">Squeeze <span>✓</span></button>
+                        <button onclick="toggleConfig('scenario', 'SQUEEZE_2C')" id="cfg-SQUEEZE_2C" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center">Squeeze vs 2 Callers <span>✓</span></button>
+                        <button onclick="toggleConfig('scenario', 'PUSH_FOLD')" id="cfg-PUSH_FOLD" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center">Push / Fold (Short Stack) <span></span></button>
+                        <button onclick="toggleConfig('scenario', 'POSTFLOP_CBET')" id="cfg-POSTFLOP_CBET" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center border-l-4 border-orange-600/60">Flop C-Bet (Postflop) <span></span></button>
+                    </div>
+                </div>
+                <div id="limper-mix-section" class="hidden">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 ml-1">Limpers Mix</p>
+                    <div class="grid grid-cols-3 gap-2" id="limper-mix-btns">
+                        <button onclick="setLimperMix('mostly1')" id="lmix-mostly1" class="config-btn py-3 rounded-lg text-[10px] font-bold">Tight</button>
+                        <button onclick="setLimperMix('liveish')" id="lmix-liveish" class="config-btn py-3 rounded-lg text-[10px] font-bold">Live 1/3</button>
+                        <button onclick="setLimperMix('multiway')" id="lmix-multiway" class="config-btn py-3 rounded-lg text-[10px] font-bold selected">Active</button>
+                    </div>
+                    <p class="text-[9px] text-slate-600 mt-1.5 ml-1">1 limper / 2 limpers / 3+ limpers — Tight: 70/22/8 · Live: 50/32/18 · Active: 38/40/22</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 ml-1">Hero Position</p>
+                    <div class="grid grid-cols-3 gap-2" id="config-pos-open">
+                        <button onclick="toggleConfig('pos', 'UTG')" id="cfg-pos-UTG" class="config-btn py-3 rounded-lg text-xs font-black">UTG</button>
+                        <button onclick="toggleConfig('pos', 'UTG1')" id="cfg-pos-UTG1" class="config-btn py-3 rounded-lg text-xs font-black">UTG+1</button>
+                        <button onclick="toggleConfig('pos', 'UTG2')" id="cfg-pos-UTG2" class="config-btn py-3 rounded-lg text-xs font-black">UTG+2</button>
+                        <button onclick="toggleConfig('pos', 'LJ')" id="cfg-pos-LJ" class="config-btn py-3 rounded-lg text-xs font-black">LJ</button>
+                        <button onclick="toggleConfig('pos', 'HJ')" id="cfg-pos-HJ" class="config-btn py-3 rounded-lg text-xs font-black">HJ</button>
+                        <button onclick="toggleConfig('pos', 'CO')" id="cfg-pos-CO" class="config-btn py-3 rounded-lg text-xs font-black">CO</button>
+                        <button onclick="toggleConfig('pos', 'BTN')" id="cfg-pos-BTN" class="config-btn py-3 rounded-lg text-xs font-black">BTN</button>
+                        <button onclick="toggleConfig('pos', 'SB')" id="cfg-pos-SB" class="config-btn py-3 rounded-lg text-xs font-black">SB</button>
+                        <button onclick="toggleConfig('pos', 'BB')" id="cfg-pos-BB" class="config-btn py-3 rounded-lg text-xs font-black">BB</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Focused Drill Options (hidden by default) -->
+            <div id="config-focused" class="hidden flex flex-col gap-6">
+                <div>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 ml-1">Choose Scenario</p>
+                    <div class="grid grid-cols-1 gap-2" id="drill-scenario-list"></div>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 ml-1">Hands</p>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setDrillCount(10)" id="drill-ct-10" class="count-btn">10</button>
+                        <button onclick="setDrillCount(25)" id="drill-ct-25" class="count-btn selected">25</button>
+                        <button onclick="setDrillCount(50)" id="drill-ct-50" class="count-btn">50</button>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-3 ml-1">Hero Position</p>
+                    <div class="grid grid-cols-3 gap-2" id="drill-pos-list"></div>
+                </div>
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex flex-col gap-3 mt-2">
+                <button onclick="startConfiguredTraining()" id="cfg-start-btn" class="w-full py-5 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-black text-xl transition-all shadow-lg">START</button>
+                <button onclick="hideConfigMenu()" class="w-full py-4 bg-slate-900 border border-slate-800 rounded-2xl font-bold text-sm text-slate-500">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DRILL COMPLETE SCREEN -->
+    <div id="drill-complete-screen" class="hidden fixed inset-0 bg-slate-950/98 backdrop-blur-xl z-[70] p-6 flex flex-col items-center justify-center">
+        <div id="drill-complete-body" class="w-full max-w-sm flex flex-col items-center gap-6"></div>
+    </div>
+
+    <!-- TRAINER SCREEN -->
+    <div id="trainer-screen" class="hidden w-full flex flex-col items-center" style="height:100dvh;overflow:hidden;">
+        <!-- Header -->
+        <div class="w-full flex justify-between items-center bg-slate-900/30 border-b border-white/5 shrink-0 z-30" style="padding: clamp(6px,1.5vh,14px) clamp(10px,2vw,24px); max-width: 1200px; margin: 0 auto;">
+            <button onclick="confirmExit()" class="text-slate-400 font-bold uppercase tracking-widest hover:text-white bg-slate-800 rounded-lg" style="font-size:clamp(8px,1.2vh,11px);padding:clamp(4px,0.8vh,8px) clamp(8px,1.2vw,14px);">Exit</button>
+            <div class="flex gap-6">
+                <div id="drill-counter" class="hidden text-right">
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Hands</p>
+                    <p id="drill-progress" class="font-black text-indigo-400" style="font-size:clamp(14px,2.5vh,22px);">0/25</p>
+                </div>
+                <div id="dr-round-counter" class="hidden text-right">
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Round</p>
+                    <p id="dr-round-num" class="font-black text-orange-400" style="font-size:clamp(14px,2.5vh,22px);">1</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Accuracy</p>
+                    <p id="accuracy" class="font-black" style="font-size:clamp(14px,2.5vh,22px);">0%</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Streak</p>
+                    <p id="streak" class="font-black text-orange-400" style="font-size:clamp(14px,2.5vh,22px);">0</p>
+                </div>
+                <div id="streak-best-block" class="hidden text-right">
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Best</p>
+                    <p id="streak-best" class="font-black text-slate-500" style="font-size:clamp(14px,2.5vh,22px);">0</p>
+                </div>
+                <button onclick="showSessionLog()" class="text-slate-400 font-bold uppercase tracking-widest hover:text-white bg-slate-800 rounded-lg flex items-center gap-1" style="font-size:clamp(8px,1.2vh,11px);padding:clamp(4px,0.8vh,8px) clamp(8px,1.2vw,14px);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M9 8h6"/><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                    LOG
+                </button>
+            </div>
+        </div>
+
+        <!-- Main content: fills remaining height, no scroll -->
+        <div id="trainer-main" class="flex-1 w-full flex flex-col items-center min-h-0" style="padding: clamp(2px,0.8vh,12px) clamp(6px,2vw,24px); gap: clamp(2px,1.2vh,12px); max-width: 1200px; margin: 0 auto;">
+
+            <!-- Scenario hint -->
+            <div class="shrink-0 flex items-center justify-center gap-2 w-full">
+                <div id="scenario-hint" class="font-bold text-slate-200 uppercase tracking-widest text-center" style="font-size:var(--hint-size, clamp(11px,1.8vh,15px)); min-height:1.2em; line-height:1.2;"></div>
+                <div id="stack-bb-badge" class="hidden shrink-0 px-2 py-0.5 bg-rose-600/20 border border-rose-500/40 rounded-full text-rose-400 font-black text-[11px]"></div>
+            </div>
+            <!-- Flop info (postflop only) -->
+            <div id="flop-info-line" class="hidden shrink-0 w-full text-center font-bold text-sm" style="line-height:1.4;"></div>
+
+            <!-- Poker table — uses container-aware sizing -->
+            <div id="table-wrapper" class="w-full shrink min-h-0 flex items-center justify-center" style="flex: 2 1 0;">
+                <div id="poker-felt-container" class="poker-felt relative flex items-center justify-center" style="width:100%; aspect-ratio:2.1/1; max-height:100%;">
+                    <div id="dealer-button" class="absolute bg-white rounded-full text-black font-black flex items-center justify-center translate-x-[-50%] translate-y-[-50%] z-40 transition-all duration-500" style="width:var(--dealer-size);height:var(--dealer-size);font-size:var(--dealer-font);">D</div>
+                    <div id="bets-layer"></div>
+                    <div id="cards-layer"></div>
+
+                    <div id="seat-SB" class="seat bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center font-black text-slate-300">SB</div>
+                    <div id="seat-BB" class="seat bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center font-black text-slate-300">BB</div>
+                    <div id="seat-UTG" class="seat bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center font-black text-slate-300">UTG</div>
+                    <div id="seat-UTG1" class="seat bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center font-black text-slate-300">UTG1</div>
+                    <div id="seat-UTG2" class="seat bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center font-black text-slate-300">UTG2</div>
+                    <div id="seat-LJ" class="seat bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center font-black text-slate-300">LJ</div>
+                    <div id="seat-HJ" class="seat bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center font-black text-slate-300">HJ</div>
+                    <div id="seat-CO" class="seat bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center font-black text-slate-300">CO</div>
+                    <div id="seat-BTN" class="seat bg-slate-800 border border-slate-600 rounded-lg flex items-center justify-center font-black text-slate-300">BTN</div>
+                </div>
+            </div>
+
+            <!-- Hero cards -->
+            <div id="hero-area" class="shrink-0 w-full flex items-center justify-center">
+                <div id="hand-display" class="flex items-center justify-center" style="gap:var(--card-gap, 12px);"></div>
+            </div>
+
+            <!-- Toast spacer (global toast container is mounted near <body>) -->
+            <div id="trainer-toast-spacer" class="shrink-0 w-full" style="min-height:var(--toast-h, 28px); max-width:var(--btn-max-w, 448px);"></div>
+
+            <!-- Action buttons -->
+            <div id="action-buttons" class="shrink-0 w-full z-20" style="max-width:var(--btn-max-w, 448px);"></div>
+            <div id="sizing-hint-line" class="shrink-0 w-full text-center font-bold text-[13px] text-slate-300 mt-1 tracking-wide" style="max-width:var(--btn-max-w, 448px);"></div>
+        </div>
+    </div>
+    <!-- SETTINGS SCREEN -->
+    <div id="settings-screen" class="hidden fixed inset-0 bg-slate-950 z-[60] flex flex-col overflow-hidden">
+        <div class="p-6 border-b border-white/5 flex justify-between items-center shrink-0">
+            <h2 class="text-2xl font-black">Settings</h2>
+            <button onclick="hideSettings()" class="p-2 bg-slate-900 rounded-lg text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 scroll-hide">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-5">
+                <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Profile</p>
+                <p class="text-sm text-slate-300 leading-relaxed mb-4">Set a username to keep separate profiles and sync across devices.</p>
+                <div class="bg-slate-950/40 border border-slate-800 rounded-xl p-3 mb-4 flex items-center justify-between">
+                    <div class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Active profile</div>
+                    <div id="settings-profile-current" class="text-sm font-black text-slate-200">Guest</div>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <input id="settings-profile-input" type="text" placeholder="Username (letters/numbers/_/-)" class="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-2xl text-slate-200 font-bold placeholder:text-slate-600 focus:outline-none focus:border-slate-600" />
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="saveProfileFromSettings()" class="py-3 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-black transition-all">SAVE</button>
+                        <button onclick="clearProfile()" class="py-3 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-2xl font-black text-slate-200 transition-all">USE GUEST</button>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Data Transfer</p>
+                <p class="text-sm text-slate-300 leading-relaxed mb-4">
+                    Export a backup file on one device, then import it on another to sync your stats + spaced-rep progress.
+                </p>
+
+                <div class="flex flex-col gap-3">
+                    <button onclick="exportTrainerData()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-black transition-all flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        EXPORT DATA
+                    </button>
+
+                    <button onclick="triggerImport()" class="w-full py-4 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                        IMPORT DATA
+                    </button>
+
+                    <input id="import-file" type="file" accept="application/json" class="hidden" />
+                </div>
+
+                <div class="mt-4 bg-slate-950/40 border border-slate-800 rounded-xl p-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <label class="flex items-center gap-2 text-[12px] font-black text-slate-200">
+                            <input id="cloud-autosave" type="checkbox" class="accent-emerald-500 w-4 h-4" onchange="saveCloudAutoPrefsFromUI()" />
+                            Auto-save
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Every</span>
+                            <select id="cloud-autosave-interval" class="bg-slate-900/60 border border-slate-700 rounded-lg px-2 py-2 text-[12px] font-black text-slate-200 outline-none" onchange="saveCloudAutoPrefsFromUI()">
+                                <option value="30000">30s</option>
+                                <option value="120000" selected>2m</option>
+                                <option value="300000">5m</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-[11px] text-slate-500 leading-relaxed">
+                        Auto-save runs silently in the background whenever your stats change (no popups). You still can manually Save/Load above.
+                    </div>
+                </div>
+
+                <div class="mt-4 text-[11px] text-slate-500 leading-relaxed">
+                    Tip: importing replaces the current device’s saved data with what’s inside the file.
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 mt-5">
+                <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Cloud Sync (Username)</p>
+                <p class="text-sm text-slate-300 leading-relaxed mb-4">
+                    Sync your progress between phone and computer using a simple username. This uses a free Firebase backend (you’ll paste your Firebase config once).
+                </p>
+
+                <div class="bg-slate-950/40 border border-slate-800 rounded-xl p-3 mb-4">
+                    <div class="flex flex-col gap-2">
+                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-500">Username</label>
+                        <input id="cloud-username" type="text" placeholder="e.g. samw" class="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-3 text-sm font-bold text-slate-200 outline-none focus:border-slate-500" />
+                        <label class="text-[10px] font-black uppercase tracking-widest text-slate-500 mt-2">Sync Code (optional)</label>
+                        <input id="cloud-code" type="password" placeholder="prevents others overwriting your username" class="w-full bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-3 text-sm font-bold text-slate-200 outline-none focus:border-slate-500" />
+                        <div class="text-[11px] text-slate-500 leading-relaxed mt-2">
+                            Tip: use a short code you’ll remember. Without a code, anyone who guesses your username could overwrite your data.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-3">
+                    <button onclick="cloudSaveNow()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-black transition-all flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                        SAVE TO CLOUD
+                    </button>
+
+                    <button onclick="cloudLoadNow()" class="w-full py-4 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-2xl font-black text-slate-200 transition-all flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        LOAD FROM CLOUD
+                    </button>
+                </div>
+
+                <div class="mt-4 text-[11px] text-slate-500 leading-relaxed">
+                    “Save” uploads your current device data. “Load” replaces this device’s data with the cloud copy, then reloads.
+                </div>
+            </div>
+
+</div>
+        </div>
+    </div>
+
+
+    <!-- SESSION LOG PANEL -->
+    <div id="session-log-panel" class="hidden fixed inset-0 z-[75] flex flex-col justify-end" style="background:rgba(0,0,0,0.6);" onclick="if(event.target===this)hideSessionLog()">
+        <div class="bg-slate-900 border-t border-slate-700 rounded-t-3xl flex flex-col panel-slide-up" style="max-height:75vh;">
+            <div class="flex justify-between items-center px-5 py-4 border-b border-white/5 shrink-0">
+                <h3 class="font-black text-base">Session Log</h3>
+                <button onclick="hideSessionLog()" class="p-1.5 bg-slate-800 rounded-lg text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+            </div>
+            <div id="session-log-list" class="flex-1 overflow-y-auto scroll-hide px-4 py-3 flex flex-col gap-2"></div>
+        </div>
+    </div>
+
+    <!-- STATS DRILL-DOWN PANEL -->
+    <div id="drilldown-panel" class="hidden fixed inset-0 bg-slate-950 z-[80] flex flex-col overflow-hidden">
+        <div class="p-5 border-b border-white/5 flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-3">
+                <button onclick="hideDrilldown()" class="p-1.5 bg-slate-800 rounded-lg text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <h3 id="drilldown-title" class="font-black text-base"></h3>
+            </div>
+            <button onclick="hideDrilldown()" class="p-1.5 bg-slate-800 rounded-lg text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+        </div>
+        <div id="drilldown-content" class="flex-1 overflow-y-auto scroll-hide p-5 flex flex-col gap-5"></div>
+    </div>
+
+    <!-- MISTAKE CHART -->
+    <div id="chart-modal" class="hidden fixed inset-0 bg-slate-950/95 z-[70] flex flex-col items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-4 w-full max-w-lg shadow-2xl flex flex-col items-center">
+            <h3 id="chart-pos-label" class="text-xs font-black text-white mb-2 uppercase tracking-widest text-center">Range Analysis</h3>
+            <p id="chart-why-text" class="hidden text-[11px] text-slate-300 text-center mb-3 px-2 leading-snug italic"></p>
+            <div id="chart-legend" class="flex gap-4 mb-4 text-[9px] font-bold uppercase tracking-wider"></div>
+            <div id="chart-bucket-toggle" class="hidden flex gap-2 mb-3"></div>
+            <div id="chart-container" class="range-grid w-full mb-6"></div>
+            <button onclick="closeChart()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold uppercase tracking-widest text-xs transition-colors">Resume</button>
+        </div>
+    </div>
+
+
+    <!-- PokerCrusher JS (split into modules — order matters!) -->
+    <script defer src="ranges.js"></script>
+    <script defer src="cloud.js"></script>
+    <script defer src="engine.js"></script>
+    <script defer src="training.js"></script>
+    <script defer src="challenge.js"></script>
+    <script defer src="ui.js"></script>
+
+<script>
+// Firebase Cloud Sync bootstrap (safe for file://).
+// When opened as a local file, cloud sync is disabled automatically.
+(function(){
+  if (location.protocol === 'file:') {
+    window.PokerCrusherCloud = null;
+    return;
+  }
+  const firebaseConfig = {
+    apiKey: "AIzaSyArpfetXIDgkdvnFXuWhpwKTyDyhDNqaFM",
+    authDomain: "poker-crusher.firebaseapp.com",
+    projectId: "poker-crusher",
+    storageBucket: "poker-crusher.firebasestorage.app",
+    messagingSenderId: "665996380905",
+    appId: "1:665996380905:web:eecb6be9bd2bea9c233e78"
+  };
+
+  async function init(){
+    try{
+      const appMod = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js");
+      const fsMod  = await import("https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js");
+      const app = appMod.initializeApp(firebaseConfig);
+      const db = fsMod.getFirestore(app);
+      window.PokerCrusherCloud = {
+        async save(docId, payload){
+          await fsMod.setDoc(fsMod.doc(db, "pokercrusher_sync", docId), payload, { merge: false });
+        },
+        async load(docId){
+          const snap = await fsMod.getDoc(fsMod.doc(db, "pokercrusher_sync", docId));
+          return snap.exists() ? snap.data() : null;
+        }
+      };
+    } catch(e){
+      // Cloud sync fails silently; trainer still works.
+      window.PokerCrusherCloud = null;
+    }
+  }
+  init();
+})();
+</script>
+
+
+</body>
+</html>
