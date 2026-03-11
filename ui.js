@@ -731,6 +731,11 @@ function getScenarioPot$(scenario) {
         if (state.postflop) return getSRPPot$(state.postflop.preflopFamily);
         return open$ * 2 + 1; // fallback
     }
+    if (scenario === 'POSTFLOP_DEFEND') {
+        // Same SRP pot — defender faces c-bet in same pot structure
+        if (state.postflop) return getSRPPot$(state.postflop.preflopFamily);
+        return open$ * 2 + 1;
+    }
     return blinds$;
 }
 
@@ -1175,8 +1180,8 @@ function showToast(text, type, duration) {
     if (_toastTimer) clearTimeout(_toastTimer);
     container.innerHTML = '';
     
-    const toastClass = type === 'correct' ? 'toast-correct' : 'toast-incorrect';
-    const icon = type === 'correct' ? '✓' : '✗';
+    const toastClass = type === 'correct' ? 'toast-correct' : type === 'neutral' ? 'toast-neutral' : 'toast-incorrect';
+    const icon = type === 'correct' ? '✓' : type === 'neutral' ? 'ℹ' : '✗';
     const toast = document.createElement('div');
     toast.className = `toast ${toastClass}`;
     toast.style.fontSize = 'var(--toast-font, 12px)';
@@ -1534,7 +1539,7 @@ function formatSpotLabel(rawSpotId) {
     if (rawSpotId === '1L' || rawSpotId === '2L' || rawSpotId === '3P') return '';
     return POS_LABELS[clean] || clean;
 }
-const SCENARIO_SHORT = { RFI: 'RFI', FACING_RFI: 'vs RFI', RFI_VS_3BET: 'vs 3Bet', VS_LIMP: 'vs Limps', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push/Fold', POSTFLOP_CBET: 'Flop C-Bet' };
+const SCENARIO_SHORT = { RFI: 'RFI', FACING_RFI: 'vs RFI', RFI_VS_3BET: 'vs 3Bet', VS_LIMP: 'vs Limps', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push/Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet' };
 const ACTION_LABELS = { FOLD: 'Fold', RAISE: 'Raise', CALL: 'Call', '3BET': '3-Bet', '4BET': '4-Bet', ISO: 'Iso Raise', OVERLIMP: 'Overlimp', SQUEEZE: 'Squeeze', SHOVE: 'Shove All-In', CHECK: 'Check', CBET: 'C-Bet' };
 
 function showSessionLog() {
@@ -1583,7 +1588,7 @@ function logRowChart(idx) {
     const e = state.sessionLog[idx];
     // Postflop log entries: show the postflop feedback modal (read-only) instead
     // of the preflop range chart, which has no handler for postflop spots.
-    if (e.scenario === 'POSTFLOP_CBET') {
+    if (e.scenario === 'POSTFLOP_CBET' || e.scenario === 'POSTFLOP_DEFEND') {
         hideSessionLog();
         const logSpot = {
             heroPos: e.pos,
@@ -1605,7 +1610,11 @@ function logRowChart(idx) {
             reasoning: e.reasoning || '',
             feedback: e.feedback || ''
         };
-        showPostflopFeedback(logSpot, logResult, e.correct);
+        if (e.scenario === 'POSTFLOP_DEFEND' && typeof showDefenderFeedback === 'function') {
+            showDefenderFeedback(logSpot, logResult);
+        } else {
+            showPostflopFeedback(logSpot, logResult, e.correct);
+        }
         return;
     }
     _chartIsReview = true;
@@ -1626,7 +1635,7 @@ function showDrilldown(title, contentFn) {
 function hideDrilldown() { document.getElementById('drilldown-panel').classList.add('hidden'); }
 
 function drilldownScenario(sc) {
-    const SCENARIO_LABELS = { RFI: 'RFI (Unopened)', FACING_RFI: 'Defending vs RFI', RFI_VS_3BET: 'vs 3-Bet', VS_LIMP: 'Vs Limpers (1–3+)', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push / Fold', POSTFLOP_CBET: 'Flop C-Bet' };
+    const SCENARIO_LABELS = { RFI: 'RFI (Unopened)', FACING_RFI: 'Defending vs RFI', RFI_VS_3BET: 'vs 3-Bet', VS_LIMP: 'Vs Limpers (1–3+)', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push / Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet' };
 
     // Daily Run meta (UI only)
     const drm = loadDailyRunMeta();
@@ -1648,7 +1657,7 @@ function drilldownScenario(sc) {
     showDrilldown(SCENARIO_LABELS[sc] || sc, (content) => {
         // Find all spots for this scenario
         // Postflop spots use SRP|/3BP|/LIMP_POT| prefixes rather than POSTFLOP_CBET|
-        const spots = sc === 'POSTFLOP_CBET'
+        const spots = (sc === 'POSTFLOP_CBET' || sc === 'POSTFLOP_DEFEND')
             ? Object.keys(state.global.bySpot).filter(k => typeof POSTFLOP_KEY_PREFIX_LIST !== 'undefined' && POSTFLOP_KEY_PREFIX_LIST.some(p => k.startsWith(p + '|')))
             : Object.keys(state.global.bySpot).filter(k => k.startsWith(sc + '|'));
         if (spots.length === 0) {
