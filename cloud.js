@@ -537,7 +537,8 @@ function resetStats() {
     state.global = { totalHands: 0, totalCorrect: 0, bestStreak: 0, byScenario: {}, byPos: {}, byPosGroup: {}, bySpot: {}, byHand: {} };
     SR.reset();
     saveMedals({});
-    try { saveChallenge({ v: 1, nodes: {}, lastPlayed: null }); } catch(e) {}
+    try { localStorage.removeItem(profileKey('gto_challenge_v1')); } catch(e) {}
+    try { if (typeof saveChallengeV2 === 'function') saveChallengeV2({ v: 2, nodes: {}, lastPlayed: null, completedAt: null }); } catch(e) {}
     saveProgress(); updateMenuUI(); renderUserStats();
 }
 // Memory retention classifier for UI indicators
@@ -585,6 +586,11 @@ function resetSpotSR(spotKey) {
 
 function renderUserStats() {
     currentProfile = localStorage.getItem('pkCrusherProfile') || 'default'; // IMP 1: guard multi-tab drift
+    if (typeof state === 'undefined' || !state || !state.global) {
+        const el = document.getElementById('stats-body');
+        if (el) el.innerHTML = '<p class="text-slate-400 text-sm p-6">Stats unavailable — please reload the page.</p>';
+        return;
+    }
     const g = state.global;
     const allSpots = getAllSpotKeys();
     const medals = loadMedals();
