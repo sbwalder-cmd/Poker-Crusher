@@ -275,6 +275,11 @@
             border: 1px solid rgba(244, 63, 94, 0.3);
             color: #fda4af;
         }
+        .toast-neutral {
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: #a5b4fc;
+        }
         @keyframes miss-flash {
             0%   { opacity: 0; }
             20%  { opacity: 1; }
@@ -704,6 +709,7 @@
                         <button onclick="toggleConfig('scenario', 'SQUEEZE_2C')" id="cfg-SQUEEZE_2C" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center">Squeeze vs 2 Callers <span>✓</span></button>
                         <button onclick="toggleConfig('scenario', 'PUSH_FOLD')" id="cfg-PUSH_FOLD" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center">Push / Fold (Short Stack) <span></span></button>
                         <button onclick="toggleConfig('scenario', 'POSTFLOP_CBET')" id="cfg-POSTFLOP_CBET" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center border-l-4 border-orange-600/60">Flop C-Bet (Postflop) <span></span></button>
+                        <button onclick="toggleConfig('scenario', 'POSTFLOP_DEFEND')" id="cfg-POSTFLOP_DEFEND" class="config-btn py-4 rounded-xl font-bold text-left px-5 flex justify-between items-center border-l-4 border-cyan-600/60">Defend vs C-Bet (Postflop) <span></span></button>
                     </div>
                 </div>
                 <div id="limper-mix-section" class="hidden">
