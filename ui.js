@@ -317,8 +317,10 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
             await delay(150);
             // BB might fold too if oppPos is BB — but BB can 3bet, so show 3bet
             const oppCoords = getSeatCoords(heroPos, oppPos);
-            animateChip(betsLayer, oppCoords, 15);
-            showActionBadge(document.getElementById(`seat-${oppPos}`), '3-BET ' + bbTo$(15), 'badge-3bet', 800);
+            const threeBetAnim$ = get3betSize$(oppPos, heroPos);
+            const threeBetAnimBB = threeBetAnim$ / BB_DOLLARS;
+            animateChip(betsLayer, oppCoords, threeBetAnimBB);
+            showActionBadge(document.getElementById(`seat-${oppPos}`), '3-BET ' + fmt$(threeBetAnim$), 'badge-3bet', 800);
             await delay(400);
         } else if (scenario === 'VS_LIMP') {
             // Multi-limp animation: fold to first limper, each limper limps, fold between, hero acts
