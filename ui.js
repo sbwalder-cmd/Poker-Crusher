@@ -1200,7 +1200,7 @@ function clearToast() {
     if (container) container.innerHTML = '';
 }
 
-function showConfigMenu() { document.getElementById('config-screen').classList.remove('hidden'); hydrateCloudUI(); hydrateCloudAutoUI(); setDrillMode(drillState.mode); updateConfigUI(); }
+function showConfigMenu() { document.getElementById('config-screen').classList.remove('hidden'); hydrateCloudUI(); hydrateCloudAutoUI(); renderSessionBuilderUI(); }
 function hideConfigMenu() { document.getElementById('config-screen').classList.add('hidden'); }
 let _chartIsReview = false;
 function closeChart() {
@@ -1221,13 +1221,15 @@ function startConfiguredTraining() {
     state.sessionLog = [];
 
     if (drillState.mode === 'focused') {
-        // Save original config, override for drill
+        // Challenge mode or legacy drill: save original config, override for drill
         drillState.active = true;
         drillState._savedConfig = JSON.parse(JSON.stringify(state.config));
         state.config.scenarios = [drillState.scenario];
         state.config.positions = [...drillState.positions];
     } else {
+        // Unified session builder: sync families → scenarios
         drillState.active = false;
+        syncSessionToConfig();
     }
 
     document.getElementById('menu-screen').classList.add('hidden');
@@ -1239,7 +1241,7 @@ function startConfiguredTraining() {
     // Start layout observer — must be called after trainer screen is visible.
     if (typeof window._trainerLayoutBoot === 'function') window._trainerLayoutBoot();
     updateUI();
-    if (typeof updateDrillCounter === 'function') updateDrillCounter(); // IMP 3: guard against missing function
+    if (typeof updateDrillCounter === 'function') updateDrillCounter();
     safeGenerateNextRound();
 }
 function confirmExit() {
@@ -1284,6 +1286,7 @@ function exitToMenu() {
         drillState._savedConfig = null;
     }
     drillState.active = false;
+    drillState.mode = 'open';  // reset to unified mode after any drill/challenge
     drillState.lockedLimperBucket = null;  // prevent bucket lock leaking into next session
     drillState._challengeMultiScenarios = null;
     reviewSession.active = false;
