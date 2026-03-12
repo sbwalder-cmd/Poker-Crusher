@@ -836,8 +836,8 @@ const raiseMain = `RAISE TO ${fmt$(open$)}`;
 const raiseHint = `Open: 5bb (${openBB.toFixed(0)}bb)`;
 setSizingHint(raiseHint);
 container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('RAISE')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">${raiseMain}</button>
+    <button data-action="FOLD" onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
+    <button data-action="RAISE" onclick="handleInput('RAISE')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">${raiseMain}</button>
 </div>`;
 } else if (state.scenario === 'FACING_RFI') {
 const villainOpen$ = getVillainOpenSize$();
@@ -847,9 +847,9 @@ const threeMain = `3-BET TO ${fmt$(threeBet$)}`;
 const threeHint = isIP ? `IP 3-bet: 3× open (${fmt$(villainOpen$)})` : `OOP 3-bet: 4× open (${fmt$(villainOpen$)})`;
 setSizingHint(threeHint);
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
-    <button onclick="handleInput('3BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">${threeMain}</button>
+    <button data-action="FOLD" onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
+    <button data-action="CALL" onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
+    <button data-action="3BET" onclick="handleInput('3BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">${threeMain}</button>
 </div>`;
 } else if (state.scenario === 'VS_LIMP') {
 const isBB = state.currentPos === 'BB';
@@ -865,9 +865,9 @@ const isoHint = `Iso: 5bb + 1bb/limper (${limpers} limper${limpers===1?'':'s'})`
 setSizingHint(isoHint);
 
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
-    <button onclick="handleInput('${isBB ? 'OVERLIMP' : 'FOLD'}')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">${isBB ? 'CHECK' : 'FOLD'}</button>
-    ${isBB ? '' : `<button onclick="handleInput('OVERLIMP')" ${btnStyle} class="bg-cyan-700 rounded-2xl font-black text-white shadow-lg">${passiveLabel}</button>`}
-    <button onclick="handleInput('${raiseAction}')" ${btnStyle} class="bg-orange-600 rounded-2xl font-black text-white shadow-lg ${isBB ? 'col-span-2' : ''}">${isoMain}</button>
+    <button data-action="${isBB ? 'OVERLIMP' : 'FOLD'}" onclick="handleInput('${isBB ? 'OVERLIMP' : 'FOLD'}')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">${isBB ? 'CHECK' : 'FOLD'}</button>
+    ${isBB ? '' : `<button data-action="OVERLIMP" onclick="handleInput('OVERLIMP')" ${btnStyle} class="bg-cyan-700 rounded-2xl font-black text-white shadow-lg">${passiveLabel}</button>`}
+    <button data-action="${raiseAction}" onclick="handleInput('${raiseAction}')" ${btnStyle} class="bg-orange-600 rounded-2xl font-black text-white shadow-lg ${isBB ? 'col-span-2' : ''}">${isoMain}</button>
 </div>`;
 } else if (state.scenario === 'SQUEEZE' || state.scenario === 'SQUEEZE_2C') {
 const callers = (state.scenario === 'SQUEEZE_2C') ? 2 : 1;
@@ -880,9 +880,9 @@ const hint = isIP ? `IP squeeze: 3.5× + 1×/caller off ${fmt$(villainOpen$)} op
 setSizingHint(hint);
 
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
-    <button onclick="handleInput('SQUEEZE')" ${btnStyle} class="bg-red-600 rounded-2xl font-black text-white shadow-lg">${main}</button>
+    <button data-action="FOLD" onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
+    <button data-action="CALL" onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
+    <button data-action="SQUEEZE" onclick="handleInput('SQUEEZE')" ${btnStyle} class="bg-red-600 rounded-2xl font-black text-white shadow-lg">${main}</button>
 </div>`;
 
 } else if (state.scenario === 'RFI_VS_3BET' || state.scenario === 'RFI_VS_3') {
@@ -894,22 +894,22 @@ const hint = heroIP ? `IP 4-bet: 2.2× 3-bet (${fmt$(threeBet$)})` : `OOP 4-bet:
 setSizingHint(hint);
 
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
-    <button onclick="handleInput('4BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">4-BET TO ${fmt$(fourBet$)}</button>
+    <button data-action="FOLD" onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
+    <button data-action="CALL" onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
+    <button data-action="4BET" onclick="handleInput('4BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">4-BET TO ${fmt$(fourBet$)}</button>
 </div>`;
 
 } else if (state.scenario === 'PUSH_FOLD') {
 const bb$ = (state.stackBB || 10) * 3; // approx $ at 1/3
 setSizingHint(`Shoving ${state.stackBB}BB (~$${bb$} at 1/3)`);
 container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('SHOVE')" ${btnStyle} class="bg-rose-600 rounded-2xl font-black text-white shadow-lg">ALL IN</button>
+    <button data-action="FOLD" onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
+    <button data-action="SHOVE" onclick="handleInput('SHOVE')" ${btnStyle} class="bg-rose-600 rounded-2xl font-black text-white shadow-lg">ALL IN</button>
 </div>`;
 } else {
 container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('RAISE')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">RAISE</button>
+    <button data-action="FOLD" onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
+    <button data-action="RAISE" onclick="handleInput('RAISE')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">RAISE</button>
 </div>`;
 }
 }
@@ -1057,6 +1057,103 @@ function getWhyText(hand, correctAction, scenario, heroPos, oppPos) {
     return ''; // fallback: no explanation
 }
 
+// ── Strategy frequency bars for chart modal ─────────────────────────────────
+// Builds a compact action breakdown card for the hand being reviewed (target).
+// Returns HTML string or '' if data is unavailable.
+function _buildPreflopActionBarsHtml(hand, scenario, heroPos, effOpp) {
+    try {
+        let actions = [];
+
+        if (scenario === 'RFI') {
+            const inRaise = checkRangeHelper(hand, rfiRanges[heroPos]);
+            actions = [
+                { label: 'Raise', pct: inRaise ? 100 : 0, color: '#4f46e5' },
+                { label: 'Fold',  pct: inRaise ? 0 : 100, color: '#475569' }
+            ];
+        } else if (scenario === 'FACING_RFI') {
+            const d = facingRfiRanges[`${heroPos}_vs_${effOpp}`];
+            if (!d) return '';
+            const is3b  = checkRangeHelper(hand, d['3-bet']);
+            const isCal = checkRangeHelper(hand, d['Call']);
+            actions = [
+                { label: '3-Bet', pct: is3b  ? 100 : 0,               color: '#4f46e5' },
+                { label: 'Call',  pct: isCal ? 100 : 0,               color: '#059669' },
+                { label: 'Fold',  pct: (!is3b && !isCal) ? 100 : 0,   color: '#475569' }
+            ];
+        } else if (scenario === 'RFI_VS_3BET' || scenario === 'RFI_VS_3') {
+            const d = rfiVs3BetRanges[`${heroPos}_vs_${effOpp}`];
+            if (!d) return '';
+            const is4b  = checkRangeHelper(hand, d['4-bet']);
+            const isCal = checkRangeHelper(hand, d['Call']);
+            actions = [
+                { label: '4-Bet', pct: is4b  ? 100 : 0,               color: '#4f46e5' },
+                { label: 'Call',  pct: isCal ? 100 : 0,               color: '#059669' },
+                { label: 'Fold',  pct: (!is4b && !isCal) ? 100 : 0,   color: '#475569' }
+            ];
+        } else if (scenario === 'VS_LIMP') {
+            const parts  = String(effOpp).split('|');
+            const oppPos = parts[0], bucket = parts[1] || '1L';
+            const d = getLimpDataForBucket(heroPos, oppPos, bucket) || allFacingLimps[`${heroPos}_vs_${oppPos}_Limp`];
+            if (!d) return '';
+            const isRaise   = checkRangeHelper(hand, getLimpRaise(d));
+            const isPassive = checkRangeHelper(hand, getLimpPassive(d));
+            const rLabel = (heroPos === 'SB' || heroPos === 'BB') ? 'Raise' : 'Iso Raise';
+            const pLabel = heroPos === 'BB' ? 'Check' : heroPos === 'SB' ? 'Complete' : 'Overlimp';
+            actions = [
+                { label: rLabel, pct: isRaise   ? 100 : 0,                    color: '#ea580c' },
+                { label: pLabel, pct: isPassive ? 100 : 0,                    color: '#0891b2' },
+                { label: 'Fold', pct: (!isRaise && !isPassive) ? 100 : 0,     color: '#475569' }
+            ];
+        } else if (scenario === 'SQUEEZE' || scenario === 'SQUEEZE_2C') {
+            const d = scenario === 'SQUEEZE' ? squeezeRanges[effOpp] : squeezeVsRfiTwoCallers[effOpp];
+            if (!d) return '';
+            const isSq  = checkRangeHelper(hand, d['Squeeze']);
+            const isCal = d['Call'] && checkRangeHelper(hand, d['Call']);
+            const sqLab = (isSq && isSqueezeBluff(hand, d)) ? 'Squeeze (Bluff)' : 'Squeeze';
+            actions = [
+                { label: sqLab,  pct: isSq  ? 100 : 0,               color: '#dc2626' },
+                { label: 'Call', pct: isCal ? 100 : 0,               color: '#059669' },
+                { label: 'Fold', pct: (!isSq && !isCal) ? 100 : 0,   color: '#475569' }
+            ];
+        } else {
+            return '';
+        }
+
+        // Put non-zero actions first so the correct answer is always at top
+        const nonZero = actions.filter(a => a.pct > 0);
+        const zero    = actions.filter(a => a.pct === 0);
+        const ordered = [...nonZero, ...zero];
+
+        const barsHtml = ordered.map(a =>
+            `<div class="flex items-center gap-2">
+                <span class="text-[10px] font-bold text-slate-400 shrink-0 text-right" style="min-width:68px;">${a.label}</span>
+                <div class="freq-bar-track flex-1">
+                    <div class="freq-bar-fill" style="width:${a.pct}%;background:${a.color};min-width:${a.pct > 0 ? '6px' : '0'};"></div>
+                </div>
+                <span class="text-[10px] font-black w-8 text-right shrink-0" style="color:${a.pct > 0 ? a.color : '#475569'}">${a.pct}%</span>
+            </div>`
+        ).join('');
+
+        const topColor  = nonZero.length ? nonZero[0].color : '#6b7280';
+        const topLabel  = nonZero.length ? nonZero[0].label : '—';
+        const isMixed   = nonZero.length > 1; // multiple valid actions (true mixed strategy)
+
+        const mixedNote = isMixed
+            ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-md ml-1" style="background:rgba(234,179,8,0.12);color:#fbbf24;border:1px solid rgba(234,179,8,0.3);">MIXED</span>`
+            : '';
+
+        return `<div class="w-full rounded-xl px-3 py-2.5" style="background:rgba(30,41,59,0.7);border:1px solid rgba(51,65,85,0.6);">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-[9px] font-black uppercase tracking-widest text-slate-500">Solver · ${hand}</span>
+                <span class="flex items-center text-[10px] font-black px-2 py-0.5 rounded-lg" style="background:${topColor}18;color:${topColor};border:1px solid ${topColor}44;">${topLabel}${mixedNote}</span>
+            </div>
+            <div class="flex flex-col gap-1.5">${barsHtml}</div>
+        </div>`;
+    } catch(e) {
+        return '';
+    }
+}
+
 function _renderChart(pos, target, scenario, oppPos) {
     let html = '';
     const legendEl = document.getElementById('chart-legend');
@@ -1083,6 +1180,20 @@ const why = getWhyText(target, correctAction, scenario, pos, effOpp);
     } else if (whyEl) {
         whyEl.textContent = '';
         whyEl.classList.add('hidden');
+    }
+
+    // Strategy frequency bars — populate when reviewing a specific missed hand
+    const barsEl = document.getElementById('chart-action-bars');
+    if (barsEl && target) {
+        try {
+            const effOpp2 = (scenario === 'VS_LIMP') ? `${oppPos}|${_chartCtx.bucket}` : oppPos;
+            const barsHtml = _buildPreflopActionBarsHtml(target, scenario, pos, effOpp2);
+            if (barsHtml) { barsEl.innerHTML = barsHtml; barsEl.classList.remove('hidden'); }
+            else { barsEl.innerHTML = ''; barsEl.classList.add('hidden'); }
+        } catch(e) { barsEl.innerHTML = ''; barsEl.classList.add('hidden'); }
+    } else if (barsEl) {
+        barsEl.innerHTML = '';
+        barsEl.classList.add('hidden');
     }
     
     if (scenario === 'RFI') {
