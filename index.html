@@ -363,6 +363,53 @@
             position: relative;
         }
     
+        /* ── Button result feedback states ─────────────────────────── */
+        /* Applied after user picks an action; buttons stay visible but non-interactive */
+        .action-buttons-result button {
+            pointer-events: none !important;
+            transition: background 0.18s ease, border-color 0.18s ease,
+                        box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s cubic-bezier(0.34,1.2,0.64,1) !important;
+        }
+        /* Selected correct action */
+        .btn-result-correct {
+            background: linear-gradient(135deg,rgba(16,185,129,0.28),rgba(16,185,129,0.14)) !important;
+            border: 1.5px solid rgba(16,185,129,0.65) !important;
+            color: #6ee7b7 !important;
+            box-shadow: 0 0 0 3px rgba(16,185,129,0.18), 0 4px 14px rgba(16,185,129,0.22) !important;
+            transform: scale(1.03) !important;
+        }
+        /* Selected wrong action */
+        .btn-result-incorrect {
+            background: linear-gradient(135deg,rgba(244,63,94,0.28),rgba(244,63,94,0.12)) !important;
+            border: 1.5px solid rgba(244,63,94,0.65) !important;
+            color: #fda4af !important;
+            box-shadow: 0 0 0 3px rgba(244,63,94,0.18) !important;
+        }
+        /* Non-selected button that WAS the correct answer */
+        .btn-result-should-be {
+            border: 1.5px solid rgba(16,185,129,0.45) !important;
+            color: rgba(110,231,183,0.85) !important;
+            background: rgba(16,185,129,0.09) !important;
+        }
+        /* Non-selected, not relevant */
+        .btn-result-dimmed {
+            opacity: 0.22 !important;
+        }
+
+        /* ── Chart modal: action frequency bars ─────────────────────── */
+        #chart-action-bars .freq-bar-track {
+            background: rgba(30,41,59,0.9);
+            border-radius: 4px;
+            overflow: hidden;
+            height: 7px;
+            flex: 1;
+        }
+        #chart-action-bars .freq-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.35s cubic-bezier(0.34,1.2,0.64,1);
+        }
+
         /* Hero bet slide animation (visual only) */
         .hero-bet-anim {
             position: absolute;
@@ -991,7 +1038,8 @@
     <div id="chart-modal" class="hidden fixed inset-0 bg-slate-950/95 z-[70] flex flex-col items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-3xl p-4 w-full max-w-lg shadow-2xl flex flex-col items-center">
             <h3 id="chart-pos-label" class="text-xs font-black text-white mb-2 uppercase tracking-widest text-center">Range Analysis</h3>
-            <p id="chart-why-text" class="hidden text-[11px] text-slate-300 text-center mb-3 px-2 leading-snug italic"></p>
+            <p id="chart-why-text" class="hidden text-[11px] text-slate-400 text-center mb-2 px-2 leading-snug italic"></p>
+            <div id="chart-action-bars" class="hidden w-full mb-3"></div>
             <div id="chart-legend" class="flex gap-4 mb-4 text-[9px] font-bold uppercase tracking-wider"></div>
             <div id="chart-bucket-toggle" class="hidden flex gap-2 mb-3"></div>
             <div id="chart-container" class="range-grid w-full mb-6"></div>
