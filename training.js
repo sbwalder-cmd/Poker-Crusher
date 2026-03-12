@@ -2408,16 +2408,42 @@ function __beginResolve() {
     return true;
 }
 
+// ── Button result feedback ──────────────────────────────────────────────────
+// Marks the selected button correct/incorrect and dims others.
+// Called immediately after action is chosen, before the grid is hidden.
+function _applyButtonResultFeedback(grid, chosenAction, correctAction) {
+    if (!grid) return;
+    grid.querySelectorAll('button').forEach(btn => {
+        const bAct = btn.dataset.action;
+        if (!bAct) return;
+        if (bAct === chosenAction && bAct === correctAction) {
+            btn.classList.add('btn-result-correct');
+        } else if (bAct === chosenAction && bAct !== correctAction) {
+            btn.classList.add('btn-result-incorrect');
+        } else if (bAct !== chosenAction && bAct === correctAction) {
+            // Highlight the answer that should have been chosen
+            btn.classList.add('btn-result-should-be');
+        } else {
+            btn.classList.add('btn-result-dimmed');
+        }
+    });
+}
+
 function handleInput(action) {
     if (!__beginResolve()) return;
-    // Immediately disable buttons to prevent double-clicks
-    const grid = document.querySelector('#action-buttons > div');
-    if (grid) { grid.classList.remove('action-buttons-revealed'); grid.classList.add('action-buttons-hidden'); }
 
-    // Use the canonical single source of truth for correct action derivation
+    // Compute correct action FIRST so we can apply visual feedback before hiding
     const correctAction = computeCorrectAction(state.currentHand, state.scenario, state.currentPos, state.oppPos, state.limperBucket);
-
     const correct = action === correctAction;
+
+    // Show result state on buttons (non-interactive, but visible for instant feedback)
+    const grid = document.querySelector('#action-buttons > div');
+    if (grid) {
+        grid.classList.remove('action-buttons-revealed');
+        grid.classList.add('action-buttons-result');
+        _applyButtonResultFeedback(grid, action, correctAction);
+    }
+
     state.sessionStats.total++; state.global.totalHands++;
 
     // Track per-scenario stats
@@ -2514,7 +2540,10 @@ function handleInput(action) {
         const __bet$ = computeHeroBetDollarsForAction(action);
         if (__bet$ != null) animateHeroBetDollars(__bet$);
 
-        updateUI(); saveProgress(); window.__roundGuard.nextTimer = setTimeout(() => { __endResolve(); if (!checkDrillComplete() && !checkDailyRunComplete()) safeGenerateNextRound(); }, 600);
+        updateUI(); saveProgress();
+        // Button result state stays visible for the full advance window, then
+        // generateNextRound → renderButtons rebuilds the DOM automatically.
+        window.__roundGuard.nextTimer = setTimeout(() => { __endResolve(); if (!checkDrillComplete() && !checkDailyRunComplete()) safeGenerateNextRound(); }, 700);
     } else {
         state.sessionStats.streak = 0;
         let correctLabel = ACTION_LABELS[correctAction] || correctAction;
@@ -2530,7 +2559,14 @@ function handleInput(action) {
         }
         showToast(`Incorrect · ${correctLabel}`, "incorrect", 1500);
         updateUI(); saveProgress();
-        setTimeout(() => showChart(state.currentPos, state.currentHand, state.scenario, state.oppPos), 0);
+        // Wait ~420ms so the button result state is clearly visible before the chart opens
+        setTimeout(() => {
+            if (grid) {
+                grid.classList.remove('action-buttons-result');
+                grid.classList.add('action-buttons-hidden');
+            }
+            showChart(state.currentPos, state.currentHand, state.scenario, state.oppPos);
+        }, 420);
     
         // FAIL-SAFE: if chart doesn't show or user backs out, don't freeze on the same hand
         setTimeout(() => {
