@@ -2294,8 +2294,8 @@ function generateNextRound() {
     if (state.scenario === 'POSTFLOP_CBET' && state.postflop) {
         clearToast();
         // Set currentHand from the generated postflop hero hand so cards render correctly
-        state.currentHand = (state.postflop.heroHand && state.postflop.heroHand.cards)
-            ? state.postflop.heroHand
+        state.currentHand = (state.postflop.heroHand && state.postflop.heroHand.handKey)
+            ? state.postflop.heroHand.handKey
             : null;
         // Show card backs immediately so the layout is stable while the table animates
         if (state.currentHand) renderHeroCardBacks();
@@ -2328,8 +2328,8 @@ function generateNextRound() {
     // POSTFLOP DEFEND: render community cards and defender buttons
     if (state.scenario === 'POSTFLOP_DEFEND' && state.postflop) {
         clearToast();
-        state.currentHand = (state.postflop.heroHand && state.postflop.heroHand.cards)
-            ? state.postflop.heroHand
+        state.currentHand = (state.postflop.heroHand && state.postflop.heroHand.handKey)
+            ? state.postflop.heroHand.handKey
             : null;
         if (state.currentHand) renderHeroCardBacks();
         const flopInfoEl = document.getElementById('flop-info-line');
