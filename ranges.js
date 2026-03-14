@@ -2538,6 +2538,467 @@ function classifyTurnCard(turnCard, flopCards) {
     return 'BRICK';
 }
 
+// =============================================================================
+// TURN TEXTURE CLASSIFICATION — rich texture analysis for strategy modifiers
+// =============================================================================
+//
+// classifyTurnTexture returns { primaryTexture, flags } describing how the turn
+// card changes the board.  The primaryTexture is the single most relevant label;
+// flags are boolean attributes that can overlap (e.g. an overcard can also add
+// straight pressure).  Strategy modifiers use these flags for fine-grained
+// frequency adjustments on top of the base turnFamily-keyed tables.
+//
+// TURN_TEXTURE_LABELS maps primaryTexture values to human-readable text shown
+// in trainer feedback.
+
+const TURN_TEXTURE_LABELS = {
+    BLANK:               'Blank',
+    LOW_BLANK:           'Low blank',
+    OVERCARD:            'Overcard',
+    BROADWAY_OVERCARD:   'Broadway overcard',
+    ACE_OVERCARD:        'Ace overcard',
+    TOP_CARD_PAIR:       'Top-card pair',
+    MIDDLE_CARD_PAIR:    'Middle-card pair',
+    BOTTOM_CARD_PAIR:    'Bottom-card pair',
+    FLUSH_COMPLETING:    'Flush completer',
+    FLUSH_DRAWING:       'Flush draw card',
+    STRAIGHT_COMPLETING: 'Straight completer',
+    STRAIGHT_DRAWING:    'Straight draw card',
+    DYNAMIC_SHIFT:       'Dynamic shift'
+};
+
+/**
+ * classifyTurnTexture — rich turn card texture analysis.
+ * flopCards: array of 3 {rank, suit}
+ * turnCard: {rank, suit}
+ * Returns { primaryTexture: string, flags: {…boolean…} }
+ */
+function classifyTurnTexture(flopCards, turnCard) {
+    const fRanks = flopCards.map(c => RANK_NUM[c.rank]).sort((a, b) => b - a);
+    const fSuits = flopCards.map(c => c.suit);
+    const tRank  = RANK_NUM[turnCard.rank];
+    const tSuit  = turnCard.suit;
+    const fTop   = fRanks[0];
+    const fMid   = fRanks[1];
+    const fBot   = fRanks[2];
+
+    // ── Flush analysis ──
+    const suitCount = {};
+    for (const s of fSuits) suitCount[s] = (suitCount[s] || 0) + 1;
+    const flopMaxSuited = Math.max(...Object.values(suitCount));
+    // Monotone flop (3 suited) + turn matches = 4 flush
+    const completesFlush = (flopMaxSuited === 3 && suitCount[tSuit] === 3) ||
+                           (flopMaxSuited === 2 && suitCount[tSuit] === 2);
+    // Flush density: turn creates 3 cards of one suit on the board (but not 4).
+    // This is meaningful because villain could have 2 of that suit for a flush draw.
+    // On a rainbow flop, the turn can only create 2-of-suit at most — not strategically
+    // meaningful for flush density.  On a two-tone flop, matching the majority suit
+    // completes flush (handled above); matching the minority suit creates 2+1+1 = not
+    // 3-suited.  So the main case is: two-tone flop where turn matches one of the
+    // two suits, creating 3-of-suit but not 4.
+    let addsFlushDensity = false;
+    if (!completesFlush) {
+        // Count suits on full 4-card board
+        const boardSuitCount = {};
+        for (const s of fSuits) boardSuitCount[s] = (boardSuitCount[s] || 0) + 1;
+        boardSuitCount[tSuit] = (boardSuitCount[tSuit] || 0) + 1;
+        // 3-of-suit on board = meaningful flush density (possible flush draw for villain)
+        addsFlushDensity = Object.values(boardSuitCount).some(n => n === 3);
+    }
+
+    // ── Board pair analysis ──
+    const pairsTopCard    = tRank === fTop;
+    const pairsMiddleCard = tRank === fMid && fMid !== fTop; // distinct middle
+    const pairsBottomCard = tRank === fBot && fBot !== fMid; // distinct bottom
+    const isBoardPair     = pairsTopCard || pairsMiddleCard || pairsBottomCard;
+
+    // ── Overcard analysis ──
+    const isOvercard         = tRank > fTop && !isBoardPair;
+    const isBroadwayOvercard = isOvercard && tRank >= 10; // T, J, Q, K, A
+    const isAceOvercard      = isOvercard && tRank === 14;
+
+    // ── Straight analysis ──
+    const allBoardRanks = [...fRanks, tRank];
+    const completesStraight = !isBoardPair && _turnBoardHasStraightDanger(allBoardRanks);
+    // Straight pressure: turn is close to flop ranks (within 2 gap) but doesn't
+    // complete a 4-in-a-row straight window.  Measures increased draw density.
+    let addsStraightPressure = false;
+    if (!completesStraight && !isBoardPair) {
+        const minGap = Math.min(...fRanks.map(r => Math.abs(r - tRank)));
+        if (minGap <= 2 && tRank >= 3 && tRank <= 13) addsStraightPressure = true;
+        // Also when turn + any 2 flop cards span ≤ 4 (creates gutshot / OESD density)
+        if (!addsStraightPressure && minGap <= 3 && tRank >= 4 && tRank <= 12) {
+            // Check if turn + flop create 3-in-a-row within a 5-card window
+            const withAceLow = allBoardRanks.includes(14) ? [...allBoardRanks, 1] : [...allBoardRanks];
+            const unique = [...new Set(withAceLow)].sort((a, b) => a - b);
+            for (let lo = 1; lo <= 10; lo++) {
+                const w5 = [lo, lo+1, lo+2, lo+3, lo+4];
+                if (w5.filter(r => unique.includes(r)).length >= 3) {
+                    addsStraightPressure = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    // ── Blank detection ──
+    const isBlank = !isOvercard && !isBoardPair && !completesFlush && !completesStraight &&
+                    !addsStraightPressure && !addsFlushDensity && tRank < fTop;
+    const isLowBlank = isBlank && tRank <= 5;
+
+    // ── Dynamic shift: umbrella for high-volatility turns ──
+    const isDynamicShift = completesFlush || completesStraight ||
+                           (isBroadwayOvercard && (addsStraightPressure || addsFlushDensity)) ||
+                           (isAceOvercard) ||
+                           (addsStraightPressure && addsFlushDensity);
+
+    // ── Primary texture (most relevant single label) ──
+    let primaryTexture;
+    if (completesFlush)            primaryTexture = 'FLUSH_COMPLETING';
+    else if (completesStraight)    primaryTexture = 'STRAIGHT_COMPLETING';
+    else if (pairsTopCard)         primaryTexture = 'TOP_CARD_PAIR';
+    else if (pairsMiddleCard)      primaryTexture = 'MIDDLE_CARD_PAIR';
+    else if (pairsBottomCard)      primaryTexture = 'BOTTOM_CARD_PAIR';
+    else if (isAceOvercard)        primaryTexture = 'ACE_OVERCARD';
+    else if (isBroadwayOvercard)   primaryTexture = 'BROADWAY_OVERCARD';
+    else if (isOvercard)           primaryTexture = 'OVERCARD';
+    else if (isDynamicShift)       primaryTexture = 'DYNAMIC_SHIFT';
+    else if (addsFlushDensity)     primaryTexture = 'FLUSH_DRAWING';
+    else if (addsStraightPressure) primaryTexture = 'STRAIGHT_DRAWING';
+    else if (isLowBlank)           primaryTexture = 'LOW_BLANK';
+    else                           primaryTexture = 'BLANK';
+
+    return {
+        primaryTexture,
+        flags: {
+            isBlank,
+            isLowBlank,
+            isOvercard,
+            isBroadwayOvercard,
+            isAceOvercard,
+            isBoardPair,
+            pairsTopCard,
+            pairsMiddleCard,
+            pairsBottomCard,
+            completesFlush,
+            addsFlushDensity,
+            completesStraight,
+            addsStraightPressure,
+            isDynamicShift
+        }
+    };
+}
+
+// =============================================================================
+// TURN TEXTURE MODIFIERS — adjust base strategy frequencies by texture flags
+// =============================================================================
+//
+// _applyTurnTextureModifier takes a base bet frequency (from the pre-computed
+// turnFamily-keyed strategy table) and adjusts it based on the richer turnTexture
+// flags.  Returns a modified frequency clamped to [0.05, 0.95].
+//
+// The modifiers are small additive adjustments that stack.  They represent
+// directionally correct poker intuitions without solver precision.
+
+/**
+ * _turnTextureModifier — compute additive frequency offset for bet/barrel.
+ * Positive = bet more, negative = bet less.
+ * heroHandClass: TURN_HAND_CLASSES key
+ * flags: turnTexture.flags object
+ */
+function _turnTextureModifier(heroHandClass, flags) {
+    let mod = 0;
+
+    // === BLANK / LOW_BLANK: safe runout favors continued aggression ===
+    if (flags.isBlank || flags.isLowBlank) {
+        // Value hands bet more freely on bricks
+        if (['OVERPAIR','TOP_PAIR','TWO_PAIR','SET','TRIPS'].includes(heroHandClass)) {
+            mod += 0.04;
+        }
+        // Semi-bluffs improve (less danger, more fold equity)
+        if (['COMBO_DRAW','STRONG_DRAW','OESD','GUTSHOT'].includes(heroHandClass)) {
+            mod += 0.03;
+        }
+        // Even air gets a small bump on pure bricks
+        if (['ACE_HIGH','OVERCARDS','AIR'].includes(heroHandClass)) {
+            mod += 0.02;
+        }
+        // Extra bump for true low blanks (2-5 below the board)
+        if (flags.isLowBlank) mod += 0.02;
+    }
+
+    // === OVERCARD: changes range dynamics ===
+    if (flags.isOvercard) {
+        // Top pair / second pair slow down (they got weaker)
+        if (['TOP_PAIR','SECOND_PAIR','THIRD_PAIR'].includes(heroHandClass)) {
+            mod -= 0.04;
+        }
+        // Overpair slows down on overcard (esp. non-ace broadway)
+        if (heroHandClass === 'OVERPAIR') {
+            mod -= 0.03;
+        }
+        // Underpair: even worse
+        if (heroHandClass === 'UNDERPAIR') {
+            mod -= 0.04;
+        }
+    }
+
+    // === BROADWAY OVERCARD: PFR range advantage improves ===
+    if (flags.isBroadwayOvercard) {
+        // For PFR (caller context handled by defend modifier): range advantage
+        // means air/overcards get slightly better bluff opportunities
+        if (['ACE_HIGH','OVERCARDS','AIR'].includes(heroHandClass)) {
+            mod += 0.02;
+        }
+        // Strong hands unaffected or slight plus from range advantage
+        if (['SET','TWO_PAIR','TRIPS','FULL_HOUSE'].includes(heroHandClass)) {
+            mod += 0.01;
+        }
+    }
+
+    // === ACE OVERCARD: dramatic shift ===
+    if (flags.isAceOvercard) {
+        // Most non-ace made hands slow down significantly
+        if (['OVERPAIR','TOP_PAIR','SECOND_PAIR','THIRD_PAIR','UNDERPAIR'].includes(heroHandClass)) {
+            mod -= 0.06;
+        }
+        // Ace-high itself improves (hit top pair if we have ace)
+        if (heroHandClass === 'ACE_HIGH') {
+            mod += 0.03;
+        }
+    }
+
+    // === BOARD PAIR: specific pair location matters ===
+    if (flags.isBoardPair) {
+        // Trips / full house / quads get correctly stronger
+        if (['TRIPS','FULL_HOUSE','QUADS','SET'].includes(heroHandClass)) {
+            mod += 0.03;
+        }
+        // Thin value hands slow down (fewer bluff catchers in villain range)
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR'].includes(heroHandClass)) {
+            mod -= 0.03;
+        }
+        // Bluffs generally reduce on paired boards
+        if (['ACE_HIGH','OVERCARDS','AIR','GUTSHOT'].includes(heroHandClass)) {
+            mod -= 0.04;
+        }
+    }
+    // Top card pair: strongest board pair effect for one-pair hands
+    if (flags.pairsTopCard) {
+        if (['TOP_PAIR','OVERPAIR'].includes(heroHandClass)) {
+            mod -= 0.02; // additional slowdown
+        }
+    }
+    // Bottom card pair: less threatening, can still barrel
+    if (flags.pairsBottomCard) {
+        if (['OVERPAIR','TOP_PAIR'].includes(heroHandClass)) {
+            mod += 0.02; // partially offset — bottom pair is less scary
+        }
+    }
+
+    // === FLUSH COMPLETING: major equity shift ===
+    if (flags.completesFlush) {
+        // Made flush bets strongly
+        if (heroHandClass === 'FLUSH') {
+            mod += 0.05;
+        }
+        // Non-flush one-pair hands slow down a lot
+        if (['TOP_PAIR','SECOND_PAIR','THIRD_PAIR','OVERPAIR','UNDERPAIR'].includes(heroHandClass)) {
+            mod -= 0.06;
+        }
+        // Naked bluffs reduce substantially
+        if (['ACE_HIGH','OVERCARDS','AIR'].includes(heroHandClass)) {
+            mod -= 0.06;
+        }
+        // Two pair / set: still bet but cautiously
+        if (['TWO_PAIR','SET'].includes(heroHandClass)) {
+            mod -= 0.03;
+        }
+    }
+
+    // === FLUSH DRAWING: increased flush density but not completing ===
+    if (flags.addsFlushDensity) {
+        // Flush draws themselves improve (more outs visible, more disguise)
+        if (['STRONG_DRAW','COMBO_DRAW'].includes(heroHandClass)) {
+            mod += 0.02;
+        }
+        // Made hands slightly more cautious
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR'].includes(heroHandClass)) {
+            mod -= 0.02;
+        }
+    }
+
+    // === STRAIGHT COMPLETING: medium hands slow down ===
+    if (flags.completesStraight) {
+        // Made straight bets hard
+        if (heroHandClass === 'STRAIGHT') {
+            mod += 0.04;
+        }
+        // Medium-strength one-pair hands slow way down
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR','UNDERPAIR'].includes(heroHandClass)) {
+            mod -= 0.05;
+        }
+        // Bluffs reduce
+        if (['ACE_HIGH','OVERCARDS','AIR','GUTSHOT'].includes(heroHandClass)) {
+            mod -= 0.04;
+        }
+    }
+
+    // === STRAIGHT DRAWING: draw pressure increases ===
+    if (flags.addsStraightPressure) {
+        // OESD / combo draws get more aggressive
+        if (['OESD','COMBO_DRAW'].includes(heroHandClass)) {
+            mod += 0.03;
+        }
+        // Medium hands slightly cautious
+        if (['TOP_PAIR','SECOND_PAIR'].includes(heroHandClass)) {
+            mod -= 0.02;
+        }
+    }
+
+    // === DYNAMIC SHIFT: general volatility increase ===
+    if (flags.isDynamicShift) {
+        // Strong hands polarize more (bet or check, less middle ground)
+        if (['SET','TWO_PAIR','FLUSH','STRAIGHT'].includes(heroHandClass)) {
+            mod += 0.02;
+        }
+        // Marginal hands check more
+        if (['SECOND_PAIR','THIRD_PAIR','UNDERPAIR'].includes(heroHandClass)) {
+            mod -= 0.03;
+        }
+    }
+
+    return mod;
+}
+
+/**
+ * _applyTurnTextureModifier — apply texture modifier to a base frequency.
+ * Returns adjusted frequency clamped to [0.05, 0.95].
+ */
+function _applyTurnTextureModifier(baseFreq, heroHandClass, turnTexture) {
+    if (!turnTexture || !turnTexture.flags) return baseFreq;
+    const mod = _turnTextureModifier(heroHandClass, turnTexture.flags);
+    return Math.max(0.05, Math.min(0.95, parseFloat((baseFreq + mod).toFixed(2))));
+}
+
+/**
+ * _applyDefenderTextureModifier — apply texture modifier to defender fold/call/raise.
+ * Returns adjusted {fold, call, raise} normalized to sum=1.
+ */
+function _applyDefenderTextureModifier(baseFCR, heroHandClass, turnTexture) {
+    if (!turnTexture || !turnTexture.flags) return baseFCR;
+    const flags = turnTexture.flags;
+    let foldAdj = 0, callAdj = 0, raiseAdj = 0;
+
+    // Defender-specific adjustments (BB facing turn bet)
+    // On blanks: defend more (less scary for medium hands)
+    if (flags.isBlank || flags.isLowBlank) {
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR'].includes(heroHandClass)) {
+            foldAdj -= 0.04; callAdj += 0.03; raiseAdj += 0.01;
+        }
+        if (['COMBO_DRAW','STRONG_DRAW','OESD'].includes(heroHandClass)) {
+            foldAdj -= 0.03; callAdj += 0.02; raiseAdj += 0.01;
+        }
+    }
+    // Overcard turns: defender weaker (villain likely has more overcards)
+    if (flags.isOvercard) {
+        if (['TOP_PAIR','SECOND_PAIR','THIRD_PAIR'].includes(heroHandClass)) {
+            foldAdj += 0.04; callAdj -= 0.03; raiseAdj -= 0.01;
+        }
+    }
+    if (flags.isAceOvercard) {
+        if (['OVERPAIR','TOP_PAIR','SECOND_PAIR'].includes(heroHandClass)) {
+            foldAdj += 0.05; callAdj -= 0.04; raiseAdj -= 0.01;
+        }
+    }
+    // Board pair: defender with trips raises more; weak hands fold more
+    if (flags.isBoardPair) {
+        if (['TRIPS','FULL_HOUSE','QUADS'].includes(heroHandClass)) {
+            raiseAdj += 0.04; callAdj -= 0.02; foldAdj -= 0.02;
+        }
+        if (['ACE_HIGH','OVERCARDS','AIR'].includes(heroHandClass)) {
+            foldAdj += 0.04; callAdj -= 0.03; raiseAdj -= 0.01;
+        }
+    }
+    // Flush completing: non-flush hands fold more; flush raises more
+    if (flags.completesFlush) {
+        if (heroHandClass === 'FLUSH') {
+            raiseAdj += 0.06; callAdj -= 0.03; foldAdj -= 0.03;
+        }
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR','UNDERPAIR'].includes(heroHandClass)) {
+            foldAdj += 0.06; callAdj -= 0.04; raiseAdj -= 0.02;
+        }
+    }
+    // Straight completing: similar pattern
+    if (flags.completesStraight) {
+        if (heroHandClass === 'STRAIGHT') {
+            raiseAdj += 0.05; callAdj -= 0.02; foldAdj -= 0.03;
+        }
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR'].includes(heroHandClass)) {
+            foldAdj += 0.05; callAdj -= 0.03; raiseAdj -= 0.02;
+        }
+    }
+
+    let fold  = Math.max(0, baseFCR.fold + foldAdj);
+    let call  = Math.max(0, baseFCR.call + callAdj);
+    let raise = Math.max(0, baseFCR.raise + raiseAdj);
+    const total = fold + call + raise;
+    if (total <= 0) return baseFCR;
+    fold  = parseFloat((fold  / total).toFixed(2));
+    call  = parseFloat((call  / total).toFixed(2));
+    raise = parseFloat((1 - fold - call).toFixed(2));
+    return {
+        fold:  Math.max(0, Math.min(1, fold)),
+        call:  Math.max(0, Math.min(1, call)),
+        raise: Math.max(0, Math.min(1, raise))
+    };
+}
+
+// =============================================================================
+// TURN TEXTURE-AWARE REASONING — contextual feedback per texture + hand class
+// =============================================================================
+
+/**
+ * _turnTextureReasoningTag — short texture explanation appended to feedback.
+ * Returns a string like "Blank turn favors continued betting." or ''.
+ */
+function _turnTextureReasoningTag(turnTexture) {
+    if (!turnTexture) return '';
+    const pt = turnTexture.primaryTexture;
+    const f  = turnTexture.flags;
+
+    if (f.completesFlush)
+        return 'Flush-completing turn shifts equities; non-flush hands check more.';
+    if (f.completesStraight)
+        return 'Straight-completing turn increases danger; medium hands slow down.';
+    if (f.isAceOvercard)
+        return 'Ace overcard dramatically changes range dynamics; PFR range improves.';
+    if (f.isBroadwayOvercard)
+        return 'Broadway overcard improves PFR range advantage.';
+    if (f.isOvercard)
+        return 'Overcard turn weakens flop-made hands and shifts range dynamics.';
+    if (f.pairsTopCard)
+        return 'Top-card paired turn reduces thin value and slows bluffs.';
+    if (f.pairsMiddleCard)
+        return 'Middle-card paired turn moderately reduces aggression.';
+    if (f.pairsBottomCard)
+        return 'Bottom-card paired turn is less threatening but still changes value thresholds.';
+    if (f.isBoardPair)
+        return 'Board-pair turn reduces value threshold and slows bluffs.';
+    if (f.isDynamicShift)
+        return 'Dynamic turn increases board volatility; ranges polarize.';
+    if (f.addsFlushDensity)
+        return 'Turn adds flush density; slight caution for non-flush holdings.';
+    if (f.addsStraightPressure)
+        return 'Turn adds straight draw pressure; connectivity increases.';
+    if (f.isLowBlank)
+        return 'Low blank favors continued value/protection betting.';
+    if (f.isBlank)
+        return 'Blank turn favors continued aggression with value and draws.';
+
+    return '';
+}
+
 /**
  * classifyTurnHand — classify hero's hand on the turn (4 community cards).
  * heroHand: { cards: [{rank, suit}, {rank, suit}] } or abstract form
@@ -2900,6 +3361,56 @@ const POSTFLOP_TURN_DEFEND_STRATEGY = {};
     }
 })();
 
+// --- Turn texture enrichment helpers ---
+
+/**
+ * _enrichTurnBarrelStrategy — apply texture modifiers to a barrel (bet50/check) strategy.
+ * Returns a new strategy object with adjusted frequencies and enriched reasoning.
+ * Does NOT mutate the original pre-computed strategy entry.
+ */
+function _enrichTurnBarrelStrategy(baseStrategy, heroHandClass, turnTexture) {
+    if (!baseStrategy || !turnTexture) return baseStrategy;
+    const baseBet = baseStrategy.actions.bet50 || 0;
+    const adjBet  = _applyTurnTextureModifier(baseBet, heroHandClass, turnTexture);
+    const adjChk  = parseFloat((1 - adjBet).toFixed(2));
+    const preferred = adjBet >= 0.50 ? 'bet50' : 'check';
+    const textureTag = _turnTextureReasoningTag(turnTexture);
+    const reasoning = textureTag
+        ? (baseStrategy.reasoning + ' ' + textureTag)
+        : baseStrategy.reasoning;
+    return {
+        actions: { check: adjChk, bet50: adjBet },
+        preferredAction: preferred,
+        reasoning: reasoning,
+        simplification: baseStrategy.simplification,
+        _baseActions: baseStrategy.actions // preserve original for debugging
+    };
+}
+
+/**
+ * _enrichTurnDefendStrategy — apply texture modifiers to a defend (fold/call/raise) strategy.
+ * Returns a new strategy object with adjusted frequencies and enriched reasoning.
+ */
+function _enrichTurnDefendStrategy(baseStrategy, heroHandClass, turnTexture) {
+    if (!baseStrategy || !turnTexture) return baseStrategy;
+    const adj = _applyDefenderTextureModifier(baseStrategy.actions, heroHandClass, turnTexture);
+    let preferred;
+    if (adj.fold >= adj.call && adj.fold >= adj.raise) preferred = 'fold';
+    else if (adj.raise >= adj.call && adj.raise >= adj.fold) preferred = 'raise';
+    else preferred = 'call';
+    const textureTag = _turnTextureReasoningTag(turnTexture);
+    const reasoning = textureTag
+        ? (baseStrategy.reasoning + ' ' + textureTag)
+        : baseStrategy.reasoning;
+    return {
+        actions: adj,
+        preferredAction: preferred,
+        reasoning: reasoning,
+        simplification: baseStrategy.simplification,
+        _baseActions: baseStrategy.actions
+    };
+}
+
 // --- Turn spot generators ---
 
 /**
@@ -2925,6 +3436,7 @@ function generateTurnCBetSpot(maxRetries, familyFilter) {
         const turnCard    = _dealTurnCard(fc, heroHand);
         const turnFamily  = classifyTurnCard(turnCard, fc);
         const turnHandCls = classifyTurnHand(heroHand, fc, turnCard);
+        const turnTexture = classifyTurnTexture(fc, turnCard);
 
         const spot = {
             potType: 'SRP', preflopFamily: fam, street: 'TURN', heroRole: 'PFR',
@@ -2935,6 +3447,7 @@ function generateTurnCBetSpot(maxRetries, familyFilter) {
             heroPos: fi.heroPos, villainPos: fi.villainPos,
             flopCards: fc, flopClassification: classifyFlop(fc),
             turnCard: turnCard, heroHand: heroHand,
+            turnTexture: turnTexture,
             actionHistory: ['FLOP_CBET', 'FLOP_CALLED'],
             potSize: null, // set below
             effectiveStack: 200
@@ -2943,7 +3456,8 @@ function generateTurnCBetSpot(maxRetries, familyFilter) {
         // We round to nearest live dollar increment for realism
         spot.potSize = null; // ui.js computes display pot from getSRPPot$; stored for metadata
         spot.spotKey = makeTurnCBetSpotKeyV1(spot);
-        spot.strategy = POSTFLOP_TURN_STRATEGY[spot.spotKey] || null;
+        const baseStrat = POSTFLOP_TURN_STRATEGY[spot.spotKey] || null;
+        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, turnHandCls, turnTexture) || baseStrat;
 
         if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
     }
@@ -2955,19 +3469,23 @@ function generateTurnCBetSpot(maxRetries, familyFilter) {
     const fc   = _generateFlopNoConflict('A_HIGH_DRY', heroHand);
     const turnCard   = _dealTurnCard(fc, heroHand);
     const turnFamily = classifyTurnCard(turnCard, fc);
+    const turnTextureFB = classifyTurnTexture(fc, turnCard);
+    const turnHandClsFB = classifyTurnHand(heroHand, fc, turnCard);
     const spot = {
         potType: 'SRP', preflopFamily: 'BTN_vs_BB', street: 'TURN', heroRole: 'PFR',
         positionState: 'IP', nodeType: 'TURN_CBET_DECISION',
         flopArchetype: 'A_HIGH_DRY', boardArchetype: 'A_HIGH_DRY',
-        turnFamily: turnFamily, heroHandClass: classifyTurnHand(heroHand, fc, turnCard),
+        turnFamily: turnFamily, heroHandClass: turnHandClsFB,
         flopHandClass: classifyFlopHand(heroHand, fc),
         heroPos: 'BTN', villainPos: 'BB',
         flopCards: fc, flopClassification: classifyFlop(fc),
         turnCard: turnCard, heroHand: heroHand,
+        turnTexture: turnTextureFB,
         actionHistory: ['FLOP_CBET', 'FLOP_CALLED'], potSize: null, effectiveStack: 200
     };
     spot.spotKey = makeTurnCBetSpotKeyV1(spot);
-    spot.strategy = POSTFLOP_TURN_STRATEGY[spot.spotKey] || null;
+    const baseStratFB = POSTFLOP_TURN_STRATEGY[spot.spotKey] || null;
+    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, turnHandClsFB, turnTextureFB) || baseStratFB;
     return spot;
 }
 
@@ -2996,6 +3514,7 @@ function generateTurnDefendSpot(maxRetries, familyFilter) {
         const turnCard    = _dealTurnCard(fc, heroHand);
         const turnFamily  = classifyTurnCard(turnCard, fc);
         const turnHandCls = classifyTurnHand(heroHand, fc, turnCard);
+        const turnTexture = classifyTurnTexture(fc, turnCard);
 
         const spot = {
             potType: 'SRP', preflopFamily: fam, street: 'TURN', heroRole: 'DEFENDER',
@@ -3006,11 +3525,13 @@ function generateTurnDefendSpot(maxRetries, familyFilter) {
             heroPos: 'BB', villainPos: villainPos,
             flopCards: fc, flopClassification: classifyFlop(fc),
             turnCard: turnCard, heroHand: heroHand,
+            turnTexture: turnTexture,
             actionHistory: ['FLOP_CBET_FACED', 'FLOP_CALLED'],
             potSize: null, effectiveStack: 200
         };
         spot.spotKey = makeTurnDefendSpotKeyV1(spot);
-        spot.strategy = POSTFLOP_TURN_DEFEND_STRATEGY[spot.spotKey] || null;
+        const baseStrat = POSTFLOP_TURN_DEFEND_STRATEGY[spot.spotKey] || null;
+        spot.strategy = _enrichTurnDefendStrategy(baseStrat, turnHandCls, turnTexture) || baseStrat;
 
         if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
     }
@@ -3021,19 +3542,23 @@ function generateTurnDefendSpot(maxRetries, familyFilter) {
     const fc   = _generateFlopNoConflict('A_HIGH_DRY', heroHand);
     const turnCard   = _dealTurnCard(fc, heroHand);
     const turnFamily = classifyTurnCard(turnCard, fc);
+    const turnTextureFB = classifyTurnTexture(fc, turnCard);
+    const turnHandClsFB = classifyTurnHand(heroHand, fc, turnCard);
     const spot = {
         potType: 'SRP', preflopFamily: 'BTN_vs_BB', street: 'TURN', heroRole: 'DEFENDER',
         positionState: 'OOP', nodeType: 'TURN_VS_BET_DECISION',
         flopArchetype: 'A_HIGH_DRY', boardArchetype: 'A_HIGH_DRY',
-        turnFamily: turnFamily, heroHandClass: classifyTurnHand(heroHand, fc, turnCard),
+        turnFamily: turnFamily, heroHandClass: turnHandClsFB,
         flopHandClass: classifyFlopHand(heroHand, fc),
         heroPos: 'BB', villainPos: 'BTN',
         flopCards: fc, flopClassification: classifyFlop(fc),
         turnCard: turnCard, heroHand: heroHand,
+        turnTexture: turnTextureFB,
         actionHistory: ['FLOP_CBET_FACED', 'FLOP_CALLED'], potSize: null, effectiveStack: 200
     };
     spot.spotKey = makeTurnDefendSpotKeyV1(spot);
-    spot.strategy = POSTFLOP_TURN_DEFEND_STRATEGY[spot.spotKey] || null;
+    const baseStratFB = POSTFLOP_TURN_DEFEND_STRATEGY[spot.spotKey] || null;
+    spot.strategy = _enrichTurnDefendStrategy(baseStratFB, turnHandClsFB, turnTextureFB) || baseStratFB;
     return spot;
 }
 
@@ -3058,7 +3583,9 @@ function scoreTurnAction(playerAction, strategy, spot) {
 
     const preferredLabel  = preferred === 'check' ? 'Check' : 'Barrel (50%)';
     const freqPct         = Math.round((strategy.actions[preferred] || 0) * 100);
-    const turnFamilyLabel = (spot && spot.turnFamily) ? (TURN_FAMILY_LABELS[spot.turnFamily] || spot.turnFamily) : '';
+    // Use rich texture label when available, fall back to turnFamily label
+    const textureLabel    = (spot && spot.turnTexture) ? (TURN_TEXTURE_LABELS[spot.turnTexture.primaryTexture] || '') : '';
+    const turnFamilyLabel = textureLabel || ((spot && spot.turnFamily) ? (TURN_FAMILY_LABELS[spot.turnFamily] || spot.turnFamily) : '');
     const handClassLabel  = (spot && spot.heroHandClass) ? (TURN_HAND_CLASS_LABELS[spot.heroHandClass] || spot.heroHandClass) : '';
 
     let feedback;
@@ -3094,7 +3621,8 @@ function scoreTurnDefenderAction(playerAction, strategy, spot) {
     const preferredLabel = preferred.charAt(0).toUpperCase() + preferred.slice(1);
     const freqPct        = Math.round((actions[preferred] || 0) * 100);
     const handClassLabel = (spot && spot.heroHandClass) ? (TURN_HAND_CLASS_LABELS[spot.heroHandClass] || spot.heroHandClass) : '';
-    const turnFamilyLabel = (spot && spot.turnFamily) ? (TURN_FAMILY_LABELS[spot.turnFamily] || spot.turnFamily) : '';
+    const textureLabel    = (spot && spot.turnTexture) ? (TURN_TEXTURE_LABELS[spot.turnTexture.primaryTexture] || '') : '';
+    const turnFamilyLabel = textureLabel || ((spot && spot.turnFamily) ? (TURN_FAMILY_LABELS[spot.turnFamily] || spot.turnFamily) : '');
 
     let feedback;
     if (isCorrect && grade === 'strong') feedback = `Correct. ${preferredLabel} (${freqPct}%).`;
@@ -3298,6 +3826,7 @@ function generateDelayedTurnSpot(maxRetries, familyFilter) {
         const turnCard    = _dealTurnCard(fc, heroHand);
         const turnFamily  = classifyTurnCard(turnCard, fc);
         const turnHandCls = classifyTurnHand(heroHand, fc, turnCard);
+        const turnTexture = classifyTurnTexture(fc, turnCard);
 
         const spot = {
             potType: 'SRP', preflopFamily: fam, street: 'TURN', heroRole: 'PFR',
@@ -3308,11 +3837,13 @@ function generateDelayedTurnSpot(maxRetries, familyFilter) {
             heroPos: fi.heroPos, villainPos: fi.villainPos,
             flopCards: fc, flopClassification: classifyFlop(fc),
             turnCard: turnCard, heroHand: heroHand,
+            turnTexture: turnTexture,
             actionHistory: ['FLOP_CHECK', 'FLOP_CHECK_BACK'],
             potSize: null, effectiveStack: 200
         };
         spot.spotKey = makeDelayedTurnSpotKeyV1(spot);
-        spot.strategy = POSTFLOP_TURN_DELAYED_STRATEGY[spot.spotKey] || null;
+        const baseStrat = POSTFLOP_TURN_DELAYED_STRATEGY[spot.spotKey] || null;
+        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, turnHandCls, turnTexture) || baseStrat;
 
         if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
     }
@@ -3324,19 +3855,23 @@ function generateDelayedTurnSpot(maxRetries, familyFilter) {
     const fc   = _generateFlopNoConflict('A_HIGH_DRY', heroHand);
     const turnCard   = _dealTurnCard(fc, heroHand);
     const turnFamily = classifyTurnCard(turnCard, fc);
+    const turnTextureFB = classifyTurnTexture(fc, turnCard);
+    const turnHandClsFB = classifyTurnHand(heroHand, fc, turnCard);
     const spot = {
         potType: 'SRP', preflopFamily: 'BTN_vs_BB', street: 'TURN', heroRole: 'PFR',
         positionState: 'IP', nodeType: 'TURN_DELAYED_CBET_DECISION',
         flopArchetype: 'A_HIGH_DRY', boardArchetype: 'A_HIGH_DRY',
-        turnFamily: turnFamily, heroHandClass: classifyTurnHand(heroHand, fc, turnCard),
+        turnFamily: turnFamily, heroHandClass: turnHandClsFB,
         flopHandClass: classifyFlopHand(heroHand, fc),
         heroPos: 'BTN', villainPos: 'BB',
         flopCards: fc, flopClassification: classifyFlop(fc),
         turnCard: turnCard, heroHand: heroHand,
+        turnTexture: turnTextureFB,
         actionHistory: ['FLOP_CHECK', 'FLOP_CHECK_BACK'], potSize: null, effectiveStack: 200
     };
     spot.spotKey = makeDelayedTurnSpotKeyV1(spot);
-    spot.strategy = POSTFLOP_TURN_DELAYED_STRATEGY[spot.spotKey] || null;
+    const baseStratFB = POSTFLOP_TURN_DELAYED_STRATEGY[spot.spotKey] || null;
+    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, turnHandClsFB, turnTextureFB) || baseStratFB;
     return spot;
 }
 
