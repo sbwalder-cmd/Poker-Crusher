@@ -2217,9 +2217,10 @@ const TURN_FAMILY_LABELS = {
 // FULL_HOUSE: includes pocket pair on paired board, or one-hole-card trips + separate board pair.
 // SET: pocket pair + exactly one board card of that rank (no board pair of that rank).
 // TRIPS: one unpaired hole card matches a board rank appearing ≥2 times on the board.
+// BOARD_TRIPS: all 3 board cards are the same rank; hero does NOT contribute to the trip rank.
 const TURN_HAND_CLASSES = [
     'STRAIGHT_FLUSH', 'QUADS', 'FULL_HOUSE', 'FLUSH', 'STRAIGHT',
-    'SET', 'TRIPS', 'TWO_PAIR', 'OVERPAIR',
+    'SET', 'TRIPS', 'BOARD_TRIPS', 'TWO_PAIR', 'OVERPAIR',
     'TOP_PAIR', 'SECOND_PAIR', 'THIRD_PAIR', 'UNDERPAIR',
     'COMBO_DRAW', 'STRONG_DRAW', 'OESD', 'GUTSHOT',
     'ACE_HIGH', 'OVERCARDS', 'AIR'
@@ -2228,6 +2229,7 @@ const TURN_HAND_CLASSES = [
 const TURN_HAND_CLASS_LABELS = {
     STRAIGHT_FLUSH: 'Straight flush', QUADS: 'Quads', FULL_HOUSE: 'Full house',
     FLUSH: 'Flush', STRAIGHT: 'Straight', SET: 'Set', TRIPS: 'Trips',
+    BOARD_TRIPS: 'Board trips',
     TWO_PAIR: 'Two pair', OVERPAIR: 'Overpair', TOP_PAIR: 'Top pair',
     SECOND_PAIR: 'Second pair', THIRD_PAIR: 'Third pair', UNDERPAIR: 'Underpair',
     COMBO_DRAW: 'Combo draw', STRONG_DRAW: 'Flush draw (turn)',
@@ -2433,11 +2435,18 @@ function _rawToTrainerBucket(rawResult, heroCards, boardCards) {
     // --- Rank 5: straight ---
     if (rank === 5) return 'STRAIGHT';
 
-    // --- Rank 4: trips — distinguish SET (pocket pair) vs TRIPS (one hole card on paired board) ---
+    // --- Rank 4: trips — distinguish SET / TRIPS / BOARD_TRIPS ---
     if (rank === 4) {
         const h1 = RANK_NUM[heroCards[0].rank], h2 = RANK_NUM[heroCards[1].rank];
         const isPocket = h1 === h2;
         if (isPocket) return 'SET';  // pocket pair flopped/turned a set
+
+        // Detect BOARD_TRIPS: the trip rank appears 3 times on the board itself,
+        // meaning hero contributes zero cards to the three-of-a-kind.
+        const bFreq = _boardRankFreqs(boardCards);
+        for (const [r, cnt] of bFreq.entries()) {
+            if (cnt >= 3 && r !== h1 && r !== h2) return 'BOARD_TRIPS';
+        }
         return 'TRIPS';              // one hole card matches a board rank appearing ≥2 times
     }
 
@@ -2712,7 +2721,7 @@ function _turnTextureModifier(heroHandClass, flags) {
     // === BLANK / LOW_BLANK: safe runout favors continued aggression ===
     if (flags.isBlank || flags.isLowBlank) {
         // Value hands bet more freely on bricks
-        if (['OVERPAIR','TOP_PAIR','TWO_PAIR','SET','TRIPS'].includes(heroHandClass)) {
+        if (['OVERPAIR','TOP_PAIR','TWO_PAIR','SET','TRIPS','BOARD_TRIPS'].includes(heroHandClass)) {
             mod += 0.04;
         }
         // Semi-bluffs improve (less danger, more fold equity)
@@ -2751,7 +2760,7 @@ function _turnTextureModifier(heroHandClass, flags) {
             mod += 0.02;
         }
         // Strong hands unaffected or slight plus from range advantage
-        if (['SET','TWO_PAIR','TRIPS','FULL_HOUSE'].includes(heroHandClass)) {
+        if (['SET','TWO_PAIR','TRIPS','BOARD_TRIPS','FULL_HOUSE'].includes(heroHandClass)) {
             mod += 0.01;
         }
     }
@@ -2771,7 +2780,7 @@ function _turnTextureModifier(heroHandClass, flags) {
     // === BOARD PAIR: specific pair location matters ===
     if (flags.isBoardPair) {
         // Trips / full house / quads get correctly stronger
-        if (['TRIPS','FULL_HOUSE','QUADS','SET'].includes(heroHandClass)) {
+        if (['TRIPS','BOARD_TRIPS','FULL_HOUSE','QUADS','SET'].includes(heroHandClass)) {
             mod += 0.03;
         }
         // Thin value hands slow down (fewer bluff catchers in villain range)
@@ -2913,7 +2922,7 @@ function _applyDefenderTextureModifier(baseFCR, heroHandClass, turnTexture) {
     }
     // Board pair: defender with trips raises more; weak hands fold more
     if (flags.isBoardPair) {
-        if (['TRIPS','FULL_HOUSE','QUADS'].includes(heroHandClass)) {
+        if (['TRIPS','BOARD_TRIPS','FULL_HOUSE','QUADS'].includes(heroHandClass)) {
             raiseAdj += 0.04; callAdj -= 0.02; foldAdj -= 0.02;
         }
         if (['ACE_HIGH','OVERCARDS','AIR'].includes(heroHandClass)) {
@@ -2997,6 +3006,234 @@ function _turnTextureReasoningTag(turnTexture) {
         return 'Blank turn favors continued aggression with value and draws.';
 
     return '';
+}
+
+// =============================================================================
+// CONTEXT-AWARE TURN REASONING BUILDER
+// =============================================================================
+//
+// _buildTurnReasoning produces non-contradictory trainer feedback by combining:
+//   1. A base sentence for the hand class
+//   2. A texture-aware follow-up that references only conditions actually present
+//
+// It replaces the old static TURN_REASONING strings at enrichment time so that
+// lines like "fold only to ace overcards" never appear when the board already
+// contains an ace.
+
+/**
+ * _buildTurnReasoning — context-aware reasoning for turn trainer feedback.
+ * opts: {
+ *   heroHandClass: TURN_HAND_CLASSES key,
+ *   turnTexture:   { primaryTexture, flags },
+ *   nodeType:      string (TURN_CBET_DECISION | TURN_VS_BET_DECISION | TURN_DELAYED_CBET_DECISION),
+ *   heroHand:      { cards: [{rank,suit},{rank,suit}] } (optional),
+ *   boardCards:    array of 4 {rank,suit} (optional — flopCards + turnCard)
+ * }
+ * Returns a string.
+ */
+function _buildTurnReasoning(opts) {
+    const hc = opts.heroHandClass || 'AIR';
+    const tex = opts.turnTexture || null;
+    const flags = tex ? tex.flags : {};
+    const pt = tex ? tex.primaryTexture : '';
+    const isDefend = opts.nodeType === 'TURN_VS_BET_DECISION';
+    const isDelayed = opts.nodeType === 'TURN_DELAYED_CBET_DECISION';
+
+    // --- Base sentence by hand class ---
+    let base = '';
+    switch (hc) {
+        case 'STRAIGHT_FLUSH':
+            base = isDefend
+                ? 'Straight flush — raise for maximum value.'
+                : 'Straight flush — the virtual nuts. Bet for maximum value.';
+            break;
+        case 'QUADS':
+            base = isDefend
+                ? 'Quads — raise to build the pot.'
+                : 'Quads — near-unbeatable. Bet or slow-play to extract value.';
+            break;
+        case 'FULL_HOUSE':
+            base = isDefend
+                ? 'Full house — raise for value.'
+                : 'Full house — near-nutted. Bet for value on most turns.';
+            break;
+        case 'FLUSH':
+            base = isDefend
+                ? 'Made flush — raise for value, or flat to trap.'
+                : 'Flush made — bet for value. Occasionally check back to balance.';
+            break;
+        case 'STRAIGHT':
+            base = isDefend
+                ? 'Made straight — raise for value, or flat to keep bluffs in.'
+                : 'Straight made — bet for value on most turns.';
+            break;
+        case 'SET':
+            base = isDefend
+                ? 'Set is very strong — raise or flat to build the pot.'
+                : (isDelayed
+                    ? 'Set after check-through — now is the time to build the pot.'
+                    : 'Set is extremely strong — value bet consistently.');
+            break;
+        case 'TRIPS':
+            base = isDefend
+                ? 'Hero-made trips — strong value hand. Raise or call confidently.'
+                : (isDelayed
+                    ? 'Hero-made trips after check-through — strong hand. Bet for value now.'
+                    : 'Hero-made trips on a paired board — bet for value consistently.');
+            break;
+        case 'BOARD_TRIPS':
+            base = isDefend
+                ? 'Trips are on the board — kicker and blockers matter. Mostly call; raise only with premium kickers.'
+                : (isDelayed
+                    ? 'Board trips after check-through — this is a kicker / showdown-value spot, not a pure value hand.'
+                    : 'Trips are on the board — this is a kicker / showdown-value spot. Bet selectively with strong kickers.');
+            break;
+        case 'TWO_PAIR':
+            base = isDefend
+                ? 'Two pair — raise for value, call on scary runouts.'
+                : (isDelayed
+                    ? 'Two pair — bet for value and protection.'
+                    : 'Two pair is strong — bet for value and protection.');
+            break;
+        case 'OVERPAIR':
+            base = isDefend
+                ? 'Overpair is strong — mostly call.'
+                : (isDelayed
+                    ? 'Overpair — check-through capped your range. Bet cautiously on safe turns.'
+                    : 'Overpair is a solid value hand on safe turns.');
+            break;
+        case 'TOP_PAIR':
+            base = isDefend
+                ? 'Top pair is mainly a calling hand here.'
+                : (isDelayed
+                    ? 'Top pair — delayed bet on safe turns; check on dynamic turns.'
+                    : 'Top pair is a core value/protection hand.');
+            break;
+        case 'SECOND_PAIR':
+            base = isDefend
+                ? 'Second pair is marginal — call only on safe turns.'
+                : 'Second pair has limited value. Checking is usually preferred.';
+            break;
+        case 'THIRD_PAIR':
+            base = isDefend
+                ? 'Third pair is weak — mostly fold facing a second barrel.'
+                : 'Third pair is weak — mostly check to see the river cheaply.';
+            break;
+        case 'UNDERPAIR':
+            base = isDefend
+                ? 'Underpair is too weak for most turn calls.'
+                : 'Underpair is marginal — mostly check for pot control.';
+            break;
+        case 'COMBO_DRAW':
+            base = isDefend
+                ? 'Combo draw — raise as semi-bluff; you have outs and fold equity.'
+                : 'Combo draw has excellent equity — semi-bluff frequently.';
+            break;
+        case 'STRONG_DRAW':
+            base = isDefend
+                ? 'Flush draw — call often; raise as semi-bluff occasionally.'
+                : 'Flush draw on the turn — semi-bluff on favorable turns.';
+            break;
+        case 'OESD':
+            base = isDefend
+                ? 'OESD — call with good pot odds. Raise on very favorable turns.'
+                : 'OESD — semi-bluff as balanced barrel.';
+            break;
+        case 'GUTSHOT':
+            base = isDefend
+                ? 'Gutshot alone — thin equity; mostly fold unless pot odds are excellent.'
+                : 'Gutshot — selective bluffs only, mostly check.';
+            break;
+        case 'ACE_HIGH':
+            base = isDefend
+                ? 'Ace-high — fold to most turn bets without a draw.'
+                : (isDelayed
+                    ? 'Ace-high — delayed bluff only on safe turns where range advantage is clear.'
+                    : 'Ace-high with no pair — bluff on safe turns, check on scary ones.');
+            break;
+        case 'OVERCARDS':
+            base = isDefend
+                ? 'Overcards only — usually fold on the turn.'
+                : 'Overcards only — bluff occasionally on safe turns, mostly check.';
+            break;
+        case 'AIR':
+            base = isDefend
+                ? 'No hand — fold. Raise-bluff is occasionally correct on safe boards.'
+                : 'No hand — give up unless the turn is very favorable for a bluff.';
+            break;
+        default:
+            base = '';
+    }
+
+    // --- Texture-aware follow-up (only append conditions that are actually true) ---
+    let addon = '';
+
+    if (flags.completesFlush) {
+        if (hc === 'FLUSH') {
+            addon = 'Flush-completing turn is ideal — bet/raise for value.';
+        } else if (['TOP_PAIR','SECOND_PAIR','OVERPAIR','UNDERPAIR','THIRD_PAIR'].includes(hc)) {
+            addon = 'Flush-completing turn reduces value of one-pair hands.';
+        } else if (['SET','TWO_PAIR','TRIPS'].includes(hc)) {
+            addon = 'Flush-completing turn warrants caution despite strong hand.';
+        } else if (['BOARD_TRIPS'].includes(hc)) {
+            addon = 'Flush-completing turn makes board-trips kicker hands even more marginal.';
+        }
+    } else if (flags.completesStraight) {
+        if (hc === 'STRAIGHT') {
+            addon = 'Straight-completing turn is ideal — bet/raise for value.';
+        } else if (['TOP_PAIR','SECOND_PAIR','OVERPAIR'].includes(hc)) {
+            addon = 'Straight-completing turn makes one-pair hands thinner.';
+        } else if (['BOARD_TRIPS'].includes(hc)) {
+            addon = 'Straight-completing turn adds more danger to a board-trips kicker spot.';
+        }
+    } else if (flags.isAceOvercard) {
+        if (['OVERPAIR','TOP_PAIR','SECOND_PAIR','UNDERPAIR','THIRD_PAIR'].includes(hc)) {
+            addon = 'Ace overcard dramatically changes range dynamics — slow down.';
+        } else if (hc === 'ACE_HIGH') {
+            addon = 'Ace turn improves your ace-high (may now be top pair).';
+        } else if (hc === 'BOARD_TRIPS') {
+            addon = 'Ace overcard on board-trips favors stronger kickers.';
+        }
+    } else if (flags.isBroadwayOvercard) {
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR'].includes(hc)) {
+            addon = 'Broadway overcard turn weakens medium made hands.';
+        } else if (['ACE_HIGH','OVERCARDS','AIR'].includes(hc)) {
+            addon = 'Broadway overcard improves PFR range advantage for bluffs.';
+        }
+    } else if (flags.isOvercard) {
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR','THIRD_PAIR'].includes(hc)) {
+            addon = 'Overcard turn weakens flop-made hands.';
+        }
+    } else if (flags.isBoardPair) {
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR'].includes(hc)) {
+            addon = 'Board-pair turn reduces thin value and slows bluffs.';
+        } else if (['TRIPS','BOARD_TRIPS'].includes(hc)) {
+            addon = 'Board-pair turn is favorable for trips-type hands.';
+        }
+    } else if (flags.isDynamicShift) {
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR'].includes(hc)) {
+            addon = 'Dynamic turn increases board volatility — prefer pot control.';
+        }
+    } else if (flags.addsFlushDensity && !flags.addsStraightPressure) {
+        if (['TOP_PAIR','SECOND_PAIR','OVERPAIR'].includes(hc)) {
+            addon = 'Turn adds flush density — slight caution for non-flush holdings.';
+        }
+    } else if (flags.addsStraightPressure && !flags.addsFlushDensity) {
+        if (['TOP_PAIR','SECOND_PAIR'].includes(hc)) {
+            addon = 'Turn adds straight draw pressure — connectivity increases.';
+        }
+    } else if (flags.isLowBlank) {
+        if (['OVERPAIR','TOP_PAIR','SET','TRIPS','TWO_PAIR','BOARD_TRIPS'].includes(hc)) {
+            addon = 'Low blank favors continued value/protection betting.';
+        }
+    } else if (flags.isBlank) {
+        if (['OVERPAIR','TOP_PAIR','SET','TRIPS','TWO_PAIR','BOARD_TRIPS'].includes(hc)) {
+            addon = 'Blank turn favors continued aggression with value and draws.';
+        }
+    }
+
+    if (addon) return base + ' ' + addon;
+    return base;
 }
 
 /**
@@ -3098,6 +3335,9 @@ const POSTFLOP_TURN_STRATEGY = {};
         SET:           { _default: 0.85, FLUSH_COMPLETE: 0.75, STRAIGHT_COMPLETE: 0.70 },
         TRIPS:         { _default: 0.82, FLUSH_COMPLETE: 0.72, STRAIGHT_COMPLETE: 0.68,
                          BOARD_PAIR: 0.80, ACE_OVERCARD: 0.75, BROADWAY_OVERCARD: 0.78 },
+        BOARD_TRIPS:   { _default: 0.48, BRICK: 0.52, LOW_BLANK: 0.55, FLUSH_COMPLETE: 0.32,
+                         STRAIGHT_COMPLETE: 0.28, ACE_OVERCARD: 0.38, BROADWAY_OVERCARD: 0.42,
+                         OVERCARD: 0.40, BOARD_PAIR: 0.45, DYNAMIC_CONNECTOR: 0.40 },
         TWO_PAIR:      { _default: 0.78, FLUSH_COMPLETE: 0.65, STRAIGHT_COMPLETE: 0.62, ACE_OVERCARD: 0.70 },
         OVERPAIR:      { _default: 0.70, ACE_OVERCARD: 0.30, FLUSH_COMPLETE: 0.55, STRAIGHT_COMPLETE: 0.50,
                          BROADWAY_OVERCARD: 0.58, OVERCARD: 0.55, BOARD_PAIR: 0.65, DYNAMIC_CONNECTOR: 0.62 },
@@ -3141,6 +3381,9 @@ const POSTFLOP_TURN_STRATEGY = {};
         SET:           { _default: 0.75, FLUSH_COMPLETE: 0.62, STRAIGHT_COMPLETE: 0.58 },
         TRIPS:         { _default: 0.70, FLUSH_COMPLETE: 0.58, STRAIGHT_COMPLETE: 0.55,
                          BOARD_PAIR: 0.68, ACE_OVERCARD: 0.62, BROADWAY_OVERCARD: 0.65 },
+        BOARD_TRIPS:   { _default: 0.35, BRICK: 0.40, LOW_BLANK: 0.42, FLUSH_COMPLETE: 0.22,
+                         STRAIGHT_COMPLETE: 0.18, ACE_OVERCARD: 0.28, BROADWAY_OVERCARD: 0.30,
+                         OVERCARD: 0.28, BOARD_PAIR: 0.32 },
         TWO_PAIR:      { _default: 0.66, FLUSH_COMPLETE: 0.52, STRAIGHT_COMPLETE: 0.50 },
         OVERPAIR:      { _default: 0.56, ACE_OVERCARD: 0.22, FLUSH_COMPLETE: 0.42, STRAIGHT_COMPLETE: 0.38,
                          BROADWAY_OVERCARD: 0.44, OVERCARD: 0.42, BOARD_PAIR: 0.50 },
@@ -3174,20 +3417,21 @@ const POSTFLOP_TURN_STRATEGY = {};
         FLUSH:        'Flush made — bet for value. Occasionally check back to balance.',
         STRAIGHT:     'Straight made — bet for value on most turns.',
         SET:          'Set is extremely strong — value bet consistently. Slow-play on scary boards.',
-        TRIPS:        'Trips — strong value hand on a paired board. Bet for value consistently.',
+        TRIPS:        'Hero-made trips on a paired board — bet for value consistently.',
+        BOARD_TRIPS:  'Trips are on the board — this is a kicker / showdown-value spot. Bet selectively with strong kickers.',
         TWO_PAIR:     'Two pair is strong — bet for value and protection.',
-        OVERPAIR:     'Overpair remains strong on blank turns, but scary turns (ace, flush) reduce frequency.',
-        TOP_PAIR:     'Top pair is a core value hand on blank turns. Check back on dynamic turns.',
-        SECOND_PAIR:  'Second pair has limited value. Check is usually preferred on the turn.',
+        OVERPAIR:     'Overpair is a solid value hand on safe turns.',
+        TOP_PAIR:     'Top pair is a core value/protection hand.',
+        SECOND_PAIR:  'Second pair has limited value. Checking is usually preferred.',
         THIRD_PAIR:   'Third pair is weak — mostly check to see the river cheaply.',
-        UNDERPAIR:    'Underpair is marginal — mostly check for pot control and showdown value.',
+        UNDERPAIR:    'Underpair is marginal — mostly check for pot control.',
         COMBO_DRAW:   'Combo draw has excellent equity — semi-bluff frequently.',
-        STRONG_DRAW:  'Flush draw on the turn (~18% equity) — semi-bluff on favorable turns.',
-        OESD:         'OESD (~32% equity on turn) — semi-bluff as balanced barrel.',
-        GUTSHOT:      'Gutshot (~17% equity) — selective bluffs only, mostly check.',
-        ACE_HIGH:     'Ace-high with no pair — bluff on blank turns, check on scary ones.',
-        OVERCARDS:    'Overcards only — bluff occasionally on blank turns, mostly check.',
-        AIR:          'No hand — semi-bluff or give up depending on turn card and opponent profile.'
+        STRONG_DRAW:  'Flush draw on the turn — semi-bluff on favorable turns.',
+        OESD:         'OESD — semi-bluff as balanced barrel.',
+        GUTSHOT:      'Gutshot — selective bluffs only, mostly check.',
+        ACE_HIGH:     'Ace-high with no pair — bluff on safe turns, check on scary ones.',
+        OVERCARDS:    'Overcards only — bluff occasionally on safe turns, mostly check.',
+        AIR:          'No hand — give up unless the turn is very favorable for a bluff.'
     };
 
     // Family offsets (applied to IP base — OOP already uses lower base)
@@ -3245,6 +3489,11 @@ const POSTFLOP_TURN_DEFEND_STRATEGY = {};
         TRIPS:        { _default: { fold: 0.00, call: 0.35, raise: 0.65 },
                         FLUSH_COMPLETE: { fold: 0.00, call: 0.28, raise: 0.72 },
                         STRAIGHT_COMPLETE: { fold: 0.00, call: 0.30, raise: 0.70 } },
+        BOARD_TRIPS:  { _default: { fold: 0.10, call: 0.65, raise: 0.25 },
+                        BRICK: { fold: 0.08, call: 0.68, raise: 0.24 },
+                        FLUSH_COMPLETE: { fold: 0.18, call: 0.60, raise: 0.22 },
+                        STRAIGHT_COMPLETE: { fold: 0.20, call: 0.58, raise: 0.22 },
+                        ACE_OVERCARD: { fold: 0.15, call: 0.62, raise: 0.23 } },
         TWO_PAIR:     { _default: { fold: 0.00, call: 0.50, raise: 0.50 },
                         FLUSH_COMPLETE: { fold: 0.05, call: 0.55, raise: 0.40 },
                         STRAIGHT_COMPLETE: { fold: 0.05, call: 0.58, raise: 0.37 } },
@@ -3290,19 +3539,20 @@ const POSTFLOP_TURN_DEFEND_STRATEGY = {};
     };
 
     const REASONING = {
-        STRAIGHT_FLUSH: 'Straight flush — raise for maximum value. You are almost certainly winning.',
-        QUADS:        'Quads — raise to build the pot. Only a higher quads or royal beats you.',
-        FULL_HOUSE:   'Full house — raise for maximum value. The only hand that beats you is a better full house or quads.',
-        FLUSH:        'Made flush — raise for value. Slow-play is also fine to trap.',
+        STRAIGHT_FLUSH: 'Straight flush — raise for maximum value.',
+        QUADS:        'Quads — raise to build the pot.',
+        FULL_HOUSE:   'Full house — raise for value.',
+        FLUSH:        'Made flush — raise for value, or flat to trap.',
         STRAIGHT:     'Made straight — raise for value, or flat to keep bluffs in.',
         SET:          'Set is very strong — raise or flat to build the pot.',
-        TRIPS:        'Trips on a paired board — raise or call for value. Villain rarely has a stronger hand.',
+        TRIPS:        'Hero-made trips — strong value hand. Raise or call confidently.',
+        BOARD_TRIPS:  'Trips are on the board — kicker and blockers matter. Mostly call; raise only with premium kickers.',
         TWO_PAIR:     'Two pair — raise for value, call on scary runouts.',
-        OVERPAIR:     'Overpair is strong — mostly call, raise on wet turns for protection.',
-        TOP_PAIR:     'Top pair is a solid calling hand on the turn. Fold only to ace overcards.',
-        SECOND_PAIR:  'Second pair is marginal on the turn — call only on blank turns.',
+        OVERPAIR:     'Overpair is strong — mostly call.',
+        TOP_PAIR:     'Top pair is mainly a calling hand here.',
+        SECOND_PAIR:  'Second pair is marginal — call only on safe turns.',
         THIRD_PAIR:   'Third pair is weak — mostly fold facing a second barrel.',
-        UNDERPAIR:    'Underpair is too weak for most turn calls — fold is usually correct.',
+        UNDERPAIR:    'Underpair is too weak for most turn calls.',
         COMBO_DRAW:   'Combo draw — raise as semi-bluff; you have outs and fold equity.',
         STRONG_DRAW:  'Flush draw — call often; raise as semi-bluff occasionally.',
         OESD:         'OESD — call with good pot odds. Raise on very favorable turns.',
@@ -3365,19 +3615,20 @@ const POSTFLOP_TURN_DEFEND_STRATEGY = {};
 
 /**
  * _enrichTurnBarrelStrategy — apply texture modifiers to a barrel (bet50/check) strategy.
- * Returns a new strategy object with adjusted frequencies and enriched reasoning.
+ * Returns a new strategy object with adjusted frequencies and context-aware reasoning.
  * Does NOT mutate the original pre-computed strategy entry.
  */
-function _enrichTurnBarrelStrategy(baseStrategy, heroHandClass, turnTexture) {
+function _enrichTurnBarrelStrategy(baseStrategy, heroHandClass, turnTexture, nodeType) {
     if (!baseStrategy || !turnTexture) return baseStrategy;
     const baseBet = baseStrategy.actions.bet50 || 0;
     const adjBet  = _applyTurnTextureModifier(baseBet, heroHandClass, turnTexture);
     const adjChk  = parseFloat((1 - adjBet).toFixed(2));
     const preferred = adjBet >= 0.50 ? 'bet50' : 'check';
-    const textureTag = _turnTextureReasoningTag(turnTexture);
-    const reasoning = textureTag
-        ? (baseStrategy.reasoning + ' ' + textureTag)
-        : baseStrategy.reasoning;
+    const reasoning = _buildTurnReasoning({
+        heroHandClass: heroHandClass,
+        turnTexture: turnTexture,
+        nodeType: nodeType || 'TURN_CBET_DECISION'
+    });
     return {
         actions: { check: adjChk, bet50: adjBet },
         preferredAction: preferred,
@@ -3389,19 +3640,20 @@ function _enrichTurnBarrelStrategy(baseStrategy, heroHandClass, turnTexture) {
 
 /**
  * _enrichTurnDefendStrategy — apply texture modifiers to a defend (fold/call/raise) strategy.
- * Returns a new strategy object with adjusted frequencies and enriched reasoning.
+ * Returns a new strategy object with adjusted frequencies and context-aware reasoning.
  */
-function _enrichTurnDefendStrategy(baseStrategy, heroHandClass, turnTexture) {
+function _enrichTurnDefendStrategy(baseStrategy, heroHandClass, turnTexture, nodeType) {
     if (!baseStrategy || !turnTexture) return baseStrategy;
     const adj = _applyDefenderTextureModifier(baseStrategy.actions, heroHandClass, turnTexture);
     let preferred;
     if (adj.fold >= adj.call && adj.fold >= adj.raise) preferred = 'fold';
     else if (adj.raise >= adj.call && adj.raise >= adj.fold) preferred = 'raise';
     else preferred = 'call';
-    const textureTag = _turnTextureReasoningTag(turnTexture);
-    const reasoning = textureTag
-        ? (baseStrategy.reasoning + ' ' + textureTag)
-        : baseStrategy.reasoning;
+    const reasoning = _buildTurnReasoning({
+        heroHandClass: heroHandClass,
+        turnTexture: turnTexture,
+        nodeType: nodeType || 'TURN_VS_BET_DECISION'
+    });
     return {
         actions: adj,
         preferredAction: preferred,
@@ -3457,7 +3709,7 @@ function generateTurnCBetSpot(maxRetries, familyFilter) {
         spot.potSize = null; // ui.js computes display pot from getSRPPot$; stored for metadata
         spot.spotKey = makeTurnCBetSpotKeyV1(spot);
         const baseStrat = POSTFLOP_TURN_STRATEGY[spot.spotKey] || null;
-        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, turnHandCls, turnTexture) || baseStrat;
+        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, turnHandCls, turnTexture, 'TURN_CBET_DECISION') || baseStrat;
 
         if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
     }
@@ -3485,7 +3737,7 @@ function generateTurnCBetSpot(maxRetries, familyFilter) {
     };
     spot.spotKey = makeTurnCBetSpotKeyV1(spot);
     const baseStratFB = POSTFLOP_TURN_STRATEGY[spot.spotKey] || null;
-    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, turnHandClsFB, turnTextureFB) || baseStratFB;
+    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, turnHandClsFB, turnTextureFB, 'TURN_CBET_DECISION') || baseStratFB;
     return spot;
 }
 
@@ -3531,7 +3783,7 @@ function generateTurnDefendSpot(maxRetries, familyFilter) {
         };
         spot.spotKey = makeTurnDefendSpotKeyV1(spot);
         const baseStrat = POSTFLOP_TURN_DEFEND_STRATEGY[spot.spotKey] || null;
-        spot.strategy = _enrichTurnDefendStrategy(baseStrat, turnHandCls, turnTexture) || baseStrat;
+        spot.strategy = _enrichTurnDefendStrategy(baseStrat, turnHandCls, turnTexture, 'TURN_VS_BET_DECISION') || baseStrat;
 
         if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
     }
@@ -3558,7 +3810,7 @@ function generateTurnDefendSpot(maxRetries, familyFilter) {
     };
     spot.spotKey = makeTurnDefendSpotKeyV1(spot);
     const baseStratFB = POSTFLOP_TURN_DEFEND_STRATEGY[spot.spotKey] || null;
-    spot.strategy = _enrichTurnDefendStrategy(baseStratFB, turnHandClsFB, turnTextureFB) || baseStratFB;
+    spot.strategy = _enrichTurnDefendStrategy(baseStratFB, turnHandClsFB, turnTextureFB, 'TURN_VS_BET_DECISION') || baseStratFB;
     return spot;
 }
 
@@ -3671,6 +3923,9 @@ const POSTFLOP_TURN_DELAYED_STRATEGY = {};
         SET:           { _default: 0.90, FLUSH_COMPLETE: 0.80, STRAIGHT_COMPLETE: 0.78 },
         TRIPS:         { _default: 0.86, FLUSH_COMPLETE: 0.76, STRAIGHT_COMPLETE: 0.74,
                          BOARD_PAIR: 0.84, ACE_OVERCARD: 0.78, BROADWAY_OVERCARD: 0.80 },
+        BOARD_TRIPS:   { _default: 0.52, BRICK: 0.56, LOW_BLANK: 0.58, FLUSH_COMPLETE: 0.35,
+                         STRAIGHT_COMPLETE: 0.32, ACE_OVERCARD: 0.42, BROADWAY_OVERCARD: 0.46,
+                         OVERCARD: 0.44, BOARD_PAIR: 0.48, DYNAMIC_CONNECTOR: 0.44 },
         TWO_PAIR:      { _default: 0.80, FLUSH_COMPLETE: 0.65, STRAIGHT_COMPLETE: 0.62, ACE_OVERCARD: 0.72 },
         OVERPAIR:      { _default: 0.50, ACE_OVERCARD: 0.20, FLUSH_COMPLETE: 0.38, STRAIGHT_COMPLETE: 0.35,
                          BROADWAY_OVERCARD: 0.40, OVERCARD: 0.38, BOARD_PAIR: 0.48, DYNAMIC_CONNECTOR: 0.44 },
@@ -3714,6 +3969,9 @@ const POSTFLOP_TURN_DELAYED_STRATEGY = {};
         SET:           { _default: 0.80, FLUSH_COMPLETE: 0.68, STRAIGHT_COMPLETE: 0.65 },
         TRIPS:         { _default: 0.76, FLUSH_COMPLETE: 0.63, STRAIGHT_COMPLETE: 0.60,
                          BOARD_PAIR: 0.74, ACE_OVERCARD: 0.66, BROADWAY_OVERCARD: 0.68 },
+        BOARD_TRIPS:   { _default: 0.38, BRICK: 0.42, LOW_BLANK: 0.44, FLUSH_COMPLETE: 0.24,
+                         STRAIGHT_COMPLETE: 0.20, ACE_OVERCARD: 0.30, BROADWAY_OVERCARD: 0.32,
+                         OVERCARD: 0.30, BOARD_PAIR: 0.36 },
         TWO_PAIR:      { _default: 0.68, FLUSH_COMPLETE: 0.52, STRAIGHT_COMPLETE: 0.50, ACE_OVERCARD: 0.58 },
         OVERPAIR:      { _default: 0.36, ACE_OVERCARD: 0.14, FLUSH_COMPLETE: 0.26, STRAIGHT_COMPLETE: 0.24,
                          BROADWAY_OVERCARD: 0.28, OVERCARD: 0.26, BOARD_PAIR: 0.34, DYNAMIC_CONNECTOR: 0.30 },
@@ -3747,18 +4005,19 @@ const POSTFLOP_TURN_DELAYED_STRATEGY = {};
         FLUSH:        'Made flush on flop check-through — bet for full value now.',
         STRAIGHT:     'Made straight — delayed value bet is very strong here.',
         SET:          'Set after check-through — now is the time to build the pot.',
-        TRIPS:        'Trips after check-through — strong hand on a paired board. Bet for value now.',
+        TRIPS:        'Hero-made trips after check-through — strong hand. Bet for value now.',
+        BOARD_TRIPS:  'Board trips after check-through — this is a kicker / showdown-value spot, not a pure value hand.',
         TWO_PAIR:     'Two pair — bet for value and protection. Flop slow-play complete.',
-        OVERPAIR:     'Overpair — check-through capped your range. Check often; bet on blank turns only.',
-        TOP_PAIR:     'Top pair — delayed bet on blank turns; check on dynamic turns to control pot.',
+        OVERPAIR:     'Overpair — check-through capped your range. Bet cautiously on safe turns.',
+        TOP_PAIR:     'Top pair — delayed bet on safe turns; check on dynamic turns.',
         SECOND_PAIR:  'Second pair — mostly check. Villain\'s range is uncapped after checking back.',
         THIRD_PAIR:   'Third pair — check almost always. Too little value and too little fold equity.',
         UNDERPAIR:    'Underpair — check. No value and a scary board for a delayed bluff.',
         COMBO_DRAW:   'Combo draw — semi-bluff. Excellent equity + fold equity against uncapped range.',
-        STRONG_DRAW:  'Flush draw — semi-bluff on blank and low turns. Check on completed flush boards.',
-        OESD:         'OESD — semi-bluff on blank turns. Check on straight-completing turns.',
+        STRONG_DRAW:  'Flush draw — semi-bluff on safe turns. Check on completed flush boards.',
+        OESD:         'OESD — semi-bluff on safe turns. Check on straight-completing turns.',
         GUTSHOT:      'Gutshot — mostly check. Delayed bluff with gutshot is very thin.',
-        ACE_HIGH:     'Ace-high — delayed bluff only on brick/low turns where range advantage is clear.',
+        ACE_HIGH:     'Ace-high — delayed bluff only on safe turns where range advantage is clear.',
         OVERCARDS:    'Overcards — check mostly. Delayed bluff selectively on pure brick turns.',
         AIR:          'Air — check-through exposes your range. Give up unless turn is very favorable.'
     };
@@ -3843,7 +4102,7 @@ function generateDelayedTurnSpot(maxRetries, familyFilter) {
         };
         spot.spotKey = makeDelayedTurnSpotKeyV1(spot);
         const baseStrat = POSTFLOP_TURN_DELAYED_STRATEGY[spot.spotKey] || null;
-        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, turnHandCls, turnTexture) || baseStrat;
+        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, turnHandCls, turnTexture, 'TURN_DELAYED_CBET_DECISION') || baseStrat;
 
         if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
     }
@@ -3871,7 +4130,7 @@ function generateDelayedTurnSpot(maxRetries, familyFilter) {
     };
     spot.spotKey = makeDelayedTurnSpotKeyV1(spot);
     const baseStratFB = POSTFLOP_TURN_DELAYED_STRATEGY[spot.spotKey] || null;
-    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, turnHandClsFB, turnTextureFB) || baseStratFB;
+    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, turnHandClsFB, turnTextureFB, 'TURN_DELAYED_CBET_DECISION') || baseStratFB;
     return spot;
 }
 
