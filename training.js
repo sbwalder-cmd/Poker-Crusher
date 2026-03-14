@@ -1557,7 +1557,7 @@ function _pfGetV2Strategy(fam, arch, hc) {
 function _pfPotSizingHtml(fam) {
     const pot = getSRPPot$(fam);
     const cbet = roundLiveDollars(pot * 0.33);
-    return `<span class="text-[10px] text-slate-500">Pot: ${fmt$(pot)} · 33% c-bet: ${fmt$(cbet)}</span>`;
+    return `<span class="text-[10px] text-slate-500">Pot: ${formatAmt(pot)} · 33% c-bet: ${formatAmt(cbet)}</span>`;
 }
 
 // ARCHETYPE short labels for matrix columns
