@@ -2446,7 +2446,8 @@ function generateNextRound() {
         } // end if (!usedDuePick)
     }
 
-    // Set scenario hint text
+    // Set scenario hint text — show row for all non-turn scenarios
+    { const _shr = document.getElementById('scenario-hint-row'); if (_shr) _shr.classList.remove('hidden'); }
     if (state.scenario === 'RFI') {
         document.getElementById('scenario-hint').innerText = "Folded to you...";
     } else if (state.scenario === 'FACING_RFI') {
@@ -2476,10 +2477,13 @@ function generateNextRound() {
         document.getElementById('scenario-hint').innerText = `${POS_LABELS[spot.villainPos]} opened, you called from BB. ${POS_LABELS[spot.villainPos]} bets 33%...`;
     } else if (state.scenario === 'POSTFLOP_TURN_CBET' && state.postflop) {
         document.getElementById('scenario-hint').innerText = '';
+        const _shr = document.getElementById('scenario-hint-row'); if (_shr) _shr.classList.add('hidden');
     } else if (state.scenario === 'POSTFLOP_TURN_DEFEND' && state.postflop) {
         document.getElementById('scenario-hint').innerText = '';
+        const _shr = document.getElementById('scenario-hint-row'); if (_shr) _shr.classList.add('hidden');
     } else if (state.scenario === 'POSTFLOP_TURN_DELAYED_CBET' && state.postflop) {
         document.getElementById('scenario-hint').innerText = '';
+        const _shr = document.getElementById('scenario-hint-row'); if (_shr) _shr.classList.add('hidden');
     } else {
         document.getElementById('scenario-hint').innerText = `You raised, ${POS_LABELS[state.oppPos]} 3-bets to ${fmt$(get3betSize$(state.oppPos, state.currentPos))}...`;
     }
@@ -2501,6 +2505,8 @@ function generateNextRound() {
     // POSTFLOP: skip hand sampling, render community cards and postflop buttons instead
     if (state.scenario === 'POSTFLOP_CBET' && state.postflop) {
         clearToast();
+        // Clear any stale turn context from a previous turn scenario
+        const _tcl = document.getElementById('turn-context-line'); if (_tcl) { _tcl.classList.add('hidden'); _tcl.innerHTML = ''; }
         // Set currentHand to full hero hand object so renderHand uses actual dealt suits
         state.currentHand = state.postflop.heroHand || null;
         // Show card backs immediately so the layout is stable while the table animates
@@ -2536,6 +2542,8 @@ function generateNextRound() {
     // POSTFLOP DEFEND: render community cards and defender buttons
     if (state.scenario === 'POSTFLOP_DEFEND' && state.postflop) {
         clearToast();
+        // Clear any stale turn context from a previous turn scenario
+        const _tcl = document.getElementById('turn-context-line'); if (_tcl) { _tcl.classList.add('hidden'); _tcl.innerHTML = ''; }
         state.currentHand = state.postflop.heroHand || null;
         if (state.currentHand) renderHeroCardBacks();
         const flopInfoEl = document.getElementById('flop-info-line');
