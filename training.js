@@ -59,10 +59,44 @@ function scenariosToFamilies(module, scenarios) {
 // UNIFIED SESSION BUILDER STATE
 // ============================================================
 let sessionBuilder = {
-    module: 'PREFLOP',
-    families: ['OPEN', 'DEFEND', 'VS_3BET', 'LIMPERS', 'SQUEEZE'],  // default active families
+    module: 'PREFLOP',  // legacy compat — derived from active families
+    families: ['OPEN', 'DEFEND', 'VS_3BET', 'LIMPERS', 'SQUEEZE'],  // can span PREFLOP + POSTFLOP
     sessionLength: 'ENDLESS'  // 'ENDLESS' | 10 | 25 | 50
 };
+
+// Which modules currently have at least one active family?
+function getActiveModules() {
+    const mods = [];
+    for (const mod of Object.keys(FAMILY_MODEL)) {
+        if (FAMILY_MODEL[mod].some(f => sessionBuilder.families.includes(f.id))) mods.push(mod);
+    }
+    return mods;
+}
+
+// Resolve families → scenarios across ALL modules
+function allFamiliesToScenarios(familyIds) {
+    const out = [];
+    for (const mod of Object.keys(FAMILY_MODEL)) {
+        for (const fam of FAMILY_MODEL[mod]) {
+            if (familyIds.includes(fam.id)) {
+                for (const sc of fam.scenarios) out.push(sc);
+            }
+        }
+    }
+    return out;
+}
+
+// Reverse: scenario keys → family IDs across all modules
+function allScenariosToFamilies(scenarios) {
+    const ids = new Set();
+    const scSet = new Set(scenarios);
+    for (const mod of Object.keys(FAMILY_MODEL)) {
+        for (const fam of FAMILY_MODEL[mod]) {
+            if (fam.scenarios.some(s => scSet.has(s))) ids.add(fam.id);
+        }
+    }
+    return [...ids];
+}
 
 // drillState kept as backward-compat shim for challenge.js and internal systems
 let drillState = {
@@ -728,12 +762,24 @@ function medalRank(m) { return { gold: 3, silver: 2, bronze: 1, none: 0 }[m] || 
 // UNIFIED SESSION BUILDER — Config UI functions
 // ============================================================
 
-// --- Module selector ---
+// --- Module header toggle (both can be active simultaneously) ---
 function setSessionModule(mod) {
     if (!FAMILY_MODEL[mod]) return;
-    sessionBuilder.module = mod;
-    // Reset to all families in new module so the default is sensible
-    sessionBuilder.families = (FAMILY_MODEL[mod] || []).map(f => f.id);
+    const modIds = FAMILY_MODEL[mod].map(f => f.id);
+    const isActive = getActiveModules().includes(mod);
+
+    if (isActive) {
+        // Turning OFF — remove this module's families, only if others remain
+        const remaining = sessionBuilder.families.filter(id => !modIds.includes(id));
+        if (remaining.length === 0) return; // can't deselect everything
+        sessionBuilder.families = remaining;
+    } else {
+        // Turning ON — add all families from this module
+        for (const id of modIds) {
+            if (!sessionBuilder.families.includes(id)) sessionBuilder.families.push(id);
+        }
+    }
+    sessionBuilder.module = getActiveModules()[0] || 'PREFLOP';
     syncSessionToConfig();
     renderSessionBuilderUI();
     saveSessionConfig();
@@ -741,12 +787,24 @@ function setSessionModule(mod) {
 
 // --- Family chip toggling ---
 function toggleFamily(familyId) {
-    const families = FAMILY_MODEL[sessionBuilder.module] || [];
-    const allIds = families.map(f => f.id);
-    if (familyId === 'MIXED') {
-        // Mixed = select all if not all selected, else deselect all back to default
-        const allSelected = allIds.every(id => sessionBuilder.families.includes(id));
-        sessionBuilder.families = allSelected ? [allIds[0]] : [...allIds];
+    if (familyId.startsWith('MIXED_')) {
+        // Per-module "All" toggle, e.g. MIXED_PREFLOP
+        const mod = familyId.replace('MIXED_', '');
+        const modIds = (FAMILY_MODEL[mod] || []).map(f => f.id);
+        const allSelected = modIds.every(id => sessionBuilder.families.includes(id));
+        if (allSelected) {
+            // Deselect all from this module — only if other families remain
+            const remaining = sessionBuilder.families.filter(id => !modIds.includes(id));
+            if (remaining.length > 0) {
+                sessionBuilder.families = remaining;
+            } else {
+                sessionBuilder.families = [modIds[0]];
+            }
+        } else {
+            for (const id of modIds) {
+                if (!sessionBuilder.families.includes(id)) sessionBuilder.families.push(id);
+            }
+        }
     } else {
         const idx = sessionBuilder.families.indexOf(familyId);
         if (idx > -1) {
@@ -755,6 +813,7 @@ function toggleFamily(familyId) {
             sessionBuilder.families.push(familyId);
         }
     }
+    sessionBuilder.module = getActiveModules()[0] || 'PREFLOP';
     // Sync to state.config.scenarios for engine compatibility
     syncSessionToConfig();
     renderSessionBuilderUI();
@@ -781,10 +840,10 @@ function setSessionLength(len) {
 
 // --- Sync session builder → state.config.scenarios ---
 function syncSessionToConfig() {
-    state.config.scenarios = familiesToScenarios(sessionBuilder.module, sessionBuilder.families);
+    state.config.scenarios = allFamiliesToScenarios(sessionBuilder.families);
     if (state.config.scenarios.length === 0) {
         // Fallback: at least one family must be active
-        const firstFam = (FAMILY_MODEL[sessionBuilder.module] || [])[0];
+        const firstFam = (FAMILY_MODEL.PREFLOP || [])[0];
         if (firstFam) {
             sessionBuilder.families = [firstFam.id];
             state.config.scenarios = [...firstFam.scenarios];
@@ -819,10 +878,20 @@ function loadSessionConfig() {
             if (c.sessionLength !== undefined) sessionBuilder.sessionLength = c.sessionLength;
         }
     } catch(e) {}
-    // If loading old config, convert scenarios→families
+    // If loading old config, convert scenarios→families across all modules
     if (sessionBuilder.families.length === 0 && state.config.scenarios.length > 0) {
-        sessionBuilder.families = scenariosToFamilies(sessionBuilder.module, state.config.scenarios);
+        sessionBuilder.families = allScenariosToFamilies(state.config.scenarios);
     }
+    // Validate: remove any family IDs that no longer exist
+    const validIds = new Set();
+    for (const mod of Object.keys(FAMILY_MODEL)) {
+        for (const fam of FAMILY_MODEL[mod]) validIds.add(fam.id);
+    }
+    sessionBuilder.families = sessionBuilder.families.filter(id => validIds.has(id));
+    if (sessionBuilder.families.length === 0) {
+        sessionBuilder.families = ['OPEN', 'DEFEND', 'VS_3BET', 'LIMPERS', 'SQUEEZE'];
+    }
+    sessionBuilder.module = getActiveModules()[0] || 'PREFLOP';
     syncSessionToConfig();
 }
 
@@ -833,26 +902,40 @@ function renderFamilyChips() {
     const container = document.getElementById('family-chips');
     if (!container) return;
     container.innerHTML = '';
-    const families = FAMILY_MODEL[sessionBuilder.module] || [];
-    const allIds = families.map(f => f.id);
-    const allSelected = allIds.length > 0 && allIds.every(id => sessionBuilder.families.includes(id));
 
-    // Individual family chips
-    for (const fam of families) {
-        const isSel = sessionBuilder.families.includes(fam.id);
-        const btn = document.createElement('button');
-        btn.onclick = () => toggleFamily(fam.id);
-        btn.className = `config-btn px-4 py-2 rounded-full text-xs font-bold transition-all ${isSel ? 'selected' : ''}`;
-        btn.textContent = fam.label;
-        container.appendChild(btn);
-    }
-    // Mixed chip
-    if (families.length > 1) {
-        const btn = document.createElement('button');
-        btn.onclick = () => toggleFamily('MIXED');
-        btn.className = `config-btn px-4 py-2 rounded-full text-xs font-bold transition-all ${allSelected ? 'selected-gold' : ''}`;
-        btn.textContent = 'Mixed';
-        container.appendChild(btn);
+    for (const mod of Object.keys(FAMILY_MODEL)) {
+        const families = FAMILY_MODEL[mod];
+        const modIds = families.map(f => f.id);
+        const anySelected = modIds.some(id => sessionBuilder.families.includes(id));
+        const allSelected = modIds.every(id => sessionBuilder.families.includes(id));
+
+        // Module header row with label + divider
+        const header = document.createElement('div');
+        header.className = 'w-full flex items-center gap-2 mt-1 first:mt-0';
+        header.innerHTML = `<span class="text-[9px] font-bold uppercase tracking-[0.15em] ${anySelected ? 'text-slate-400' : 'text-slate-600'}">${mod === 'PREFLOP' ? 'Preflop' : 'Postflop'}</span><div class="flex-1 border-t border-slate-800"></div>`;
+        container.appendChild(header);
+
+        // Chip row
+        const row = document.createElement('div');
+        row.className = 'flex flex-wrap gap-2';
+
+        for (const fam of families) {
+            const isSel = sessionBuilder.families.includes(fam.id);
+            const btn = document.createElement('button');
+            btn.onclick = () => toggleFamily(fam.id);
+            btn.className = `config-btn px-4 py-2 rounded-full text-xs font-bold transition-all ${isSel ? 'selected' : ''}`;
+            btn.textContent = fam.label;
+            row.appendChild(btn);
+        }
+        // "All" chip per module (if >1 family)
+        if (families.length > 1) {
+            const btn = document.createElement('button');
+            btn.onclick = () => toggleFamily('MIXED_' + mod);
+            btn.className = `config-btn px-4 py-2 rounded-full text-xs font-bold transition-all ${allSelected ? 'selected-gold' : ''}`;
+            btn.textContent = 'All';
+            row.appendChild(btn);
+        }
+        container.appendChild(row);
     }
 }
 
@@ -881,7 +964,7 @@ function renderSessionLengthUI() {
 }
 
 function renderDynamicFilters() {
-    const hasLimpers = sessionBuilder.module === 'PREFLOP' && sessionBuilder.families.includes('LIMPERS');
+    const hasLimpers = sessionBuilder.families.includes('LIMPERS');
     const limperEl = document.getElementById('filter-limper-mix');
     if (limperEl) limperEl.classList.toggle('hidden', !hasLimpers);
     // Update limper mix button states
@@ -896,7 +979,7 @@ function validatePool() {
     const startBtn = document.getElementById('cfg-start-btn');
     if (!msgEl || !startBtn) return;
 
-    const scenarios = familiesToScenarios(sessionBuilder.module, sessionBuilder.families);
+    const scenarios = allFamiliesToScenarios(sessionBuilder.families);
     if (scenarios.length === 0) {
         msgEl.textContent = 'Select at least one spot family.';
         msgEl.classList.remove('hidden');
@@ -910,15 +993,12 @@ function validatePool() {
 }
 
 function renderSessionBuilderUI() {
-    // Module buttons
-    ['PREFLOP', 'POSTFLOP'].forEach(mod => {
-        const btn = document.getElementById(`mod-${mod}`);
-        if (btn) btn.className = `flex-1 py-2.5 rounded-xl text-xs font-black transition-all config-btn ${sessionBuilder.module === mod ? 'selected' : ''}`;
-    });
+    // Module buttons removed — families are now grouped in the Spots section
     renderFamilyChips();
-    // Hero position filter is preflop-only — postflop families already encode position
+    // Hero position filter shows when any preflop family is active
+    const hasPreflop = getActiveModules().includes('PREFLOP');
     const posBlock = document.getElementById('filter-hero-position');
-    if (posBlock) posBlock.classList.toggle('hidden', sessionBuilder.module === 'POSTFLOP');
+    if (posBlock) posBlock.classList.toggle('hidden', !hasPreflop);
     renderPositionChips();
     renderSessionLengthUI();
     renderDynamicFilters();
