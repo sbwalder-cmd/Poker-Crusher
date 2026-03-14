@@ -789,6 +789,16 @@ function getScenarioPot$(scenario) {
         if (state.postflop) return getSRPPot$(state.postflop.preflopFamily);
         return open$ * 2 + getSmallBlind$();
     }
+    if (scenario === 'POSTFLOP_TURN_PROBE') {
+        // Probe line: flop checked through, no flop bet — same pot as delayed cbet
+        if (state.postflop) return getSRPPot$(state.postflop.preflopFamily);
+        return open$ * 2 + getSmallBlind$();
+    }
+    if (scenario === 'POSTFLOP_TURN_PROBE_DEFEND') {
+        // BB hero probing: pot same as checked-through flop
+        if (state.postflop) return getSRPPot$(state.postflop.preflopFamily);
+        return open$ * 2 + getSmallBlind$();
+    }
     return blinds$;
 }
 
