@@ -2593,6 +2593,7 @@ function generateNextRound() {
         try { updateTable(spot.heroPos, spot.villainPos); } catch(_) {}
         // Villain checked turn — show check indicator
         try { renderVillainCheck(document.getElementById('bets-layer'), spot.heroPos, spot.villainPos); } catch(_) {}
+        try { _renderTurnContext(spot, 'POSTFLOP_TURN_CBET'); } catch(_) {}
         renderTurnCBetButtons(true);
         setTimeout(() => {
             if (state.currentHand) {
@@ -2622,6 +2623,7 @@ function generateNextRound() {
         try { updateTable(spot.heroPos, spot.villainPos); } catch(_) {}
         // Villain bet turn — show bet chip near their seat
         try { const _pot = getScenarioPot$(state.scenario); renderVillainBet(document.getElementById('bets-layer'), spot.heroPos, spot.villainPos, Math.round(_pot * 0.5)); } catch(_) {}
+        try { _renderTurnContext(spot, 'POSTFLOP_TURN_DEFEND'); } catch(_) {}
         renderTurnDefenderButtons(true);
         setTimeout(() => {
             if (state.currentHand) {
@@ -2652,6 +2654,7 @@ function generateNextRound() {
         try { updateTable(spot.heroPos, spot.villainPos); } catch(_) {}
         // Villain checked turn — show check indicator
         try { renderVillainCheck(document.getElementById('bets-layer'), spot.heroPos, spot.villainPos); } catch(_) {}
+        try { _renderTurnContext(spot, 'POSTFLOP_TURN_DELAYED_CBET'); } catch(_) {}
         renderDelayedTurnButtons(true);
         setTimeout(() => {
             if (state.currentHand) {
@@ -3049,7 +3052,64 @@ function renderCommunityCards(cards){
     cc.innerHTML='';
     cards.forEach((c,i)=>{ const color=flopSuitColor(c.suit); const el=document.createElement('div'); el.className='card-display'; el.style.cssText=`width:var(--cc-w,42px);height:var(--cc-h,58px);display:flex;flex-direction:column;align-items:center;justify-content:center;animation:ccDeal 0.25s ease-out both;animation-delay:${i*0.12}s;`; el.innerHTML=`<div style="font-size:var(--cc-rank-size,16px);font-weight:900;color:${color};line-height:1;">${c.rank}</div><div style="font-size:var(--cc-suit-size,14px);color:${color};line-height:1;">${SUIT_SYMBOLS[c.suit]}</div>`; cc.appendChild(el); });
 }
-function clearCommunityCards(){ const cc=document.getElementById('community-cards'); if(cc) cc.innerHTML=''; const fi=document.getElementById('flop-info-line'); if(fi) fi.classList.add('hidden'); }
+function clearCommunityCards(){ const cc=document.getElementById('community-cards'); if(cc) cc.innerHTML=''; const fi=document.getElementById('flop-info-line'); if(fi) fi.classList.add('hidden'); const tc=document.getElementById('turn-context-line'); if(tc){ tc.classList.add('hidden'); tc.innerHTML=''; } }
+
+// --- Turn context UI layer ---
+// Renders street badge, spot-type label, and action history for turn scenarios.
+// Populates #turn-context-line; safe to call with any spot — falls back gracefully.
+const _TURN_SPOT_LABELS = {
+    POSTFLOP_TURN_CBET:         'Turn Barrel',
+    POSTFLOP_TURN_DEFEND:       'Turn Defense',
+    POSTFLOP_TURN_DELAYED_CBET: 'Delayed Turn Bet'
+};
+
+function _renderTurnContext(spot, scenario) {
+    const el = document.getElementById('turn-context-line');
+    if (!el) return;
+    try {
+        // Street badge
+        const boardLen = (spot.turnCard) ? 4 : (spot.flopCards ? spot.flopCards.length : 0);
+        const street   = boardLen >= 4 ? 'TURN' : 'FLOP';
+        const streetColor = street === 'TURN' ? '#818cf8' : '#34d399'; // indigo for turn, emerald for flop
+
+        // Spot label
+        const spotLabel = _TURN_SPOT_LABELS[scenario] || '';
+
+        // Header row: [TURN] · Turn Barrel
+        const headerParts = [
+            `<span style="display:inline-block;padding:1px 7px;border-radius:9999px;background:${streetColor}22;border:1px solid ${streetColor}55;color:${streetColor};font-size:10px;font-weight:900;letter-spacing:.08em;">${street}</span>`
+        ];
+        if (spotLabel) {
+            headerParts.push(`<span style="color:#94a3b8;font-size:10px;font-weight:700;letter-spacing:.04em;">·</span>`);
+            headerParts.push(`<span style="color:#cbd5e1;font-size:10px;font-weight:700;">${spotLabel}</span>`);
+        }
+
+        // Action history line
+        const heroLabel   = (spot.heroPos   && POS_LABELS[spot.heroPos])   || spot.heroPos   || 'Hero';
+        const villainLabel= (spot.villainPos && POS_LABELS[spot.villainPos])|| spot.villainPos|| 'Villain';
+        const hist = spot.actionHistory || [];
+
+        let histLine = '';
+        if (hist.includes('FLOP_CBET') && hist.includes('FLOP_CALLED')) {
+            histLine = `${heroLabel} opens, ${villainLabel} calls · Flop: ${heroLabel} bets, ${villainLabel} calls`;
+        } else if (hist.includes('FLOP_CBET_FACED') && hist.includes('FLOP_CALLED')) {
+            histLine = `${villainLabel} opens, ${heroLabel} calls · Flop: ${villainLabel} bets, ${heroLabel} calls`;
+        } else if (hist.includes('FLOP_CHECK') && hist.includes('FLOP_CHECK_BACK')) {
+            histLine = `${heroLabel} opens, ${villainLabel} calls · Flop: checked through`;
+        } else if (hist.length > 0) {
+            histLine = hist.join(' · ');
+        }
+
+        el.innerHTML = [
+            `<div style="display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap;">${headerParts.join(' ')}</div>`,
+            histLine ? `<div style="color:#64748b;font-size:10px;font-weight:600;margin-top:1px;">${histLine}</div>` : ''
+        ].join('');
+        el.classList.remove('hidden');
+    } catch(_) {
+        // Fail silently — never crash the trainer
+        el.classList.add('hidden');
+    }
+}
 
 function handlePostflopInput(action){
     if(!__beginResolve()) return;
