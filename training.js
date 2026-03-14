@@ -56,12 +56,28 @@ function scenariosToFamilies(module, scenarios) {
 }
 
 // ============================================================
+// STAKE PRESETS — single source of truth for blind/sizing values
+// ============================================================
+const STAKE_PRESETS = {
+    '1/2': { id: '1/2', label: '1/2', sb: 1, bb: 2, defaultOpen: 10,
+              villainOpenPool: [4, 6, 8, 8, 10, 10, 10, 10, 12, 15, 17, 20] },
+    '1/3': { id: '1/3', label: '1/3', sb: 1, bb: 3, defaultOpen: 15,
+              villainOpenPool: [6, 10, 12, 12, 15, 15, 15, 15, 15, 15, 17, 18, 20, 25] },
+    '2/5': { id: '2/5', label: '2/5', sb: 2, bb: 5, defaultOpen: 20,
+              villainOpenPool: [10, 15, 15, 20, 20, 20, 20, 25, 25, 30, 35, 40] },
+    '5/10': { id: '5/10', label: '5/10', sb: 5, bb: 10, defaultOpen: 40,
+               villainOpenPool: [20, 25, 30, 30, 40, 40, 40, 50, 60, 75] },
+};
+
+// ============================================================
 // UNIFIED SESSION BUILDER STATE
 // ============================================================
 let sessionBuilder = {
     module: 'PREFLOP',  // legacy compat — derived from active families
     families: ['OPEN', 'DEFEND', 'VS_3BET', 'LIMPERS', 'SQUEEZE'],  // can span PREFLOP + POSTFLOP
-    sessionLength: 'ENDLESS'  // 'ENDLESS' | 10 | 25 | 50
+    sessionLength: 'ENDLESS',  // 'ENDLESS' | 10 | 25 | 50
+    stakeId: '1/3',            // key into STAKE_PRESETS
+    displayMode: 'dollars'     // 'dollars' | 'bb'
 };
 
 // Which modules currently have at least one active family?
@@ -838,6 +854,48 @@ function setSessionLength(len) {
     saveSessionConfig();
 }
 
+function setStakePreset(id) {
+    if (!STAKE_PRESETS[id]) return;
+    sessionBuilder.stakeId = id;
+    const preset = STAKE_PRESETS[id];
+    state.config.openSize = preset.defaultOpen;
+    renderSessionBuilderUI();
+    saveSessionConfig();
+    saveConfig();
+}
+
+function setDisplayMode(mode) {
+    if (mode !== 'dollars' && mode !== 'bb') return;
+    sessionBuilder.displayMode = mode;
+    renderSessionBuilderUI();
+    saveSessionConfig();
+}
+
+function renderStakeDisplayUI(container) {
+    if (!container) return;
+    const stakeIds = Object.keys(STAKE_PRESETS);
+    const stakeHtml = stakeIds.map(id => {
+        const sel = sessionBuilder.stakeId === id;
+        return `<button onclick="setStakePreset('${id}')" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all config-btn ${sel ? 'selected' : ''}">${id}</button>`;
+    }).join('');
+    const dollarsSel = sessionBuilder.displayMode === 'dollars';
+    const bbSel = sessionBuilder.displayMode === 'bb';
+    container.innerHTML = `
+        <div class="flex flex-col gap-3">
+            <div>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-2">Stakes</p>
+                <div class="flex gap-2">${stakeHtml}</div>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-2">Display</p>
+                <div class="flex gap-2">
+                    <button onclick="setDisplayMode('dollars')" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all config-btn ${dollarsSel ? 'selected' : ''}">$</button>
+                    <button onclick="setDisplayMode('bb')" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all config-btn ${bbSel ? 'selected' : ''}">BB</button>
+                </div>
+            </div>
+        </div>`;
+}
+
 // --- Sync session builder → state.config.scenarios ---
 function syncSessionToConfig() {
     state.config.scenarios = allFamiliesToScenarios(sessionBuilder.families);
@@ -864,7 +922,9 @@ function saveSessionConfig() {
         localStorage.setItem(profileKey('gto_session_builder_v1'), JSON.stringify({
             module: sessionBuilder.module,
             families: sessionBuilder.families,
-            sessionLength: sessionBuilder.sessionLength
+            sessionLength: sessionBuilder.sessionLength,
+            stakeId: sessionBuilder.stakeId,
+            displayMode: sessionBuilder.displayMode
         }));
     } catch(e) {}
 }
@@ -876,8 +936,13 @@ function loadSessionConfig() {
             if (c.module && FAMILY_MODEL[c.module]) sessionBuilder.module = c.module;
             if (c.families && Array.isArray(c.families)) sessionBuilder.families = c.families;
             if (c.sessionLength !== undefined) sessionBuilder.sessionLength = c.sessionLength;
+            if (c.stakeId && STAKE_PRESETS[c.stakeId]) sessionBuilder.stakeId = c.stakeId;
+            if (c.displayMode === 'dollars' || c.displayMode === 'bb') sessionBuilder.displayMode = c.displayMode;
         }
     } catch(e) {}
+    // Sync openSize to match stake preset's defaultOpen
+    const preset = STAKE_PRESETS[sessionBuilder.stakeId] || STAKE_PRESETS['1/3'];
+    state.config.openSize = preset.defaultOpen;
     // If loading old config, convert scenarios→families across all modules
     if (sessionBuilder.families.length === 0 && state.config.scenarios.length > 0) {
         sessionBuilder.families = allScenariosToFamilies(state.config.scenarios);
@@ -1002,6 +1067,9 @@ function renderSessionBuilderUI() {
     renderPositionChips();
     renderSessionLengthUI();
     renderDynamicFilters();
+    // Stake + Display controls
+    const sdBlock = document.getElementById('filter-stake-display');
+    if (sdBlock) renderStakeDisplayUI(sdBlock);
     validatePool();
 }
 
@@ -1058,12 +1126,14 @@ function loadConfig() {
                 state.config.positions = c.positions.filter(p => ALL_POSITIONS.includes(p));
                 if (state.config.positions.length === 0) state.config.positions = [...ALL_POSITIONS];
             }
+            // openSize is now derived from stakePreset — only fall back to stored value
+            // if no stake preset has been loaded yet (handled by loadSessionConfig below)
             if (c.openSize && [12, 15, 20].includes(c.openSize)) {
                 state.config.openSize = c.openSize;
             }
         }
     } catch(e) {}
-    // Load unified session builder config (layered on top)
+    // Load unified session builder config (layered on top — may override openSize via preset)
     loadSessionConfig();
 }
 
