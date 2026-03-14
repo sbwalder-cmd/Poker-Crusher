@@ -4217,3 +4217,520 @@ function generateDelayedTurnSpot(maxRetries, familyFilter) {
 function scoreDelayedTurnAction(playerAction, strategy, spot) {
     return scoreTurnAction(playerAction, strategy, spot);
 }
+
+// ============================================================
+// SRP POSTFLOP PHASE 2 — TURN PROBE
+// ============================================================
+// Line: SRP → flop checked through → BB probes turn → IP hero responds (fold/call/raise).
+// Complementary to TURN_DELAYED_CBET: same flop line, opposite perspective.
+//
+// Initial family scope: BTN_vs_BB, CO_vs_BB (IP heroes only for Phase 2).
+//
+// POSTFLOP_TURN_PROBE        — IP hero faces BB's probe after flop check-through.
+// POSTFLOP_TURN_PROBE_DEFEND — BB hero decides bet vs check as the prober on the turn.
+
+// Families enabled for probe scenarios (IP heroes facing OOP probe)
+const PROBE_IP_FAMILIES = ['BTN_vs_BB', 'CO_vs_BB'];
+
+/**
+ * makeProbeFacingSpotKeyV1
+ * SRP|{family}|TURN|PFR|IP|TURN_PROBE_FACING_DECISION|{turnFamily}|{heroHandClass}
+ * Hero is the IP PFR who checked back the flop and now faces BB's probe.
+ */
+function makeProbeFacingSpotKeyV1(spot) {
+    return `SRP|${spot.preflopFamily}|TURN|PFR|IP|TURN_PROBE_FACING_DECISION|${spot.turnFamily}|${spot.heroHandClass}`;
+}
+
+/**
+ * makeProbeDefendSpotKeyV1
+ * SRP|{family}|TURN|DEFENDER|OOP|TURN_PROBE_BET_DECISION|{turnFamily}|{heroHandClass}
+ * Hero is BB (OOP) who is probing: decides bet vs check.
+ */
+function makeProbeDefendSpotKeyV1(spot) {
+    return `SRP|${spot.preflopFamily}|TURN|DEFENDER|OOP|TURN_PROBE_BET_DECISION|${spot.turnFamily}|${spot.heroHandClass}`;
+}
+
+// ---- Strategy: IP hero faces BB probe (fold / call / raise) ----
+// After a flop check-through the BB's range is uncapped (strong hands included).
+// IP hero's range is capped (checked back = no top-of-range nuts on flop).
+// Key tendencies:
+//   - Strong made hands: call or raise (depending on texture), never fold.
+//   - Draws: call with equity, raise as semi-bluffs selectively.
+//   - Marginal made hands: call on safe turns, fold on unfavorable turns.
+//   - Air / weak hands: fold to probe bet (limited reverse implied odds).
+const POSTFLOP_TURN_PROBE_STRATEGY = {};
+
+(function() {
+    // IP hero base fold/call/raise frequencies vs BB turn probe (33% sizing)
+    // IP hero was the PFR who checked back flop — range is capped.
+    // BB's probe range is wide (semi-bluffs + value) due to checked-through flop.
+    const BASE_IP = {
+        STRAIGHT_FLUSH: { fold: 0.00, call: 0.05, raise: 0.95 },
+        QUADS:          { fold: 0.00, call: 0.10, raise: 0.90 },
+        FULL_HOUSE:     { fold: 0.00, call: 0.12, raise: 0.88,
+                          FLUSH_COMPLETE: { fold: 0.00, call: 0.20, raise: 0.80 } },
+        FLUSH:          { fold: 0.00, call: 0.15, raise: 0.85,
+                          FLUSH_COMPLETE: { fold: 0.00, call: 0.25, raise: 0.75 } },
+        STRAIGHT:       { fold: 0.00, call: 0.15, raise: 0.85 },
+        SET:            { fold: 0.00, call: 0.18, raise: 0.82,
+                          FLUSH_COMPLETE: { fold: 0.00, call: 0.28, raise: 0.72 },
+                          STRAIGHT_COMPLETE: { fold: 0.00, call: 0.30, raise: 0.70 } },
+        TRIPS:          { fold: 0.00, call: 0.22, raise: 0.78,
+                          FLUSH_COMPLETE: { fold: 0.00, call: 0.35, raise: 0.65 },
+                          STRAIGHT_COMPLETE: { fold: 0.00, call: 0.38, raise: 0.62 },
+                          ACE_OVERCARD: { fold: 0.00, call: 0.28, raise: 0.72 } },
+        BOARD_TRIPS:    { fold: 0.05, call: 0.58, raise: 0.37,
+                          FLUSH_COMPLETE: { fold: 0.10, call: 0.62, raise: 0.28 },
+                          STRAIGHT_COMPLETE: { fold: 0.12, call: 0.62, raise: 0.26 },
+                          ACE_OVERCARD: { fold: 0.08, call: 0.62, raise: 0.30 } },
+        TWO_PAIR:       { fold: 0.00, call: 0.30, raise: 0.70,
+                          FLUSH_COMPLETE: { fold: 0.05, call: 0.52, raise: 0.43 },
+                          STRAIGHT_COMPLETE: { fold: 0.05, call: 0.55, raise: 0.40 },
+                          ACE_OVERCARD: { fold: 0.02, call: 0.38, raise: 0.60 } },
+        OVERPAIR:       { fold: 0.05, call: 0.52, raise: 0.43,
+                          ACE_OVERCARD: { fold: 0.20, call: 0.60, raise: 0.20 },
+                          FLUSH_COMPLETE: { fold: 0.12, call: 0.62, raise: 0.26 },
+                          STRAIGHT_COMPLETE: { fold: 0.15, call: 0.62, raise: 0.23 },
+                          BROADWAY_OVERCARD: { fold: 0.10, call: 0.62, raise: 0.28 },
+                          OVERCARD: { fold: 0.12, call: 0.60, raise: 0.28 },
+                          BOARD_PAIR: { fold: 0.08, call: 0.55, raise: 0.37 },
+                          DYNAMIC_CONNECTOR: { fold: 0.10, call: 0.58, raise: 0.32 },
+                          BRICK: { fold: 0.03, call: 0.45, raise: 0.52 },
+                          LOW_BLANK: { fold: 0.02, call: 0.40, raise: 0.58 } },
+        TOP_PAIR:       { fold: 0.08, call: 0.62, raise: 0.30,
+                          BRICK: { fold: 0.04, call: 0.55, raise: 0.41 },
+                          LOW_BLANK: { fold: 0.04, call: 0.52, raise: 0.44 },
+                          ACE_OVERCARD: { fold: 0.28, call: 0.62, raise: 0.10 },
+                          FLUSH_COMPLETE: { fold: 0.22, call: 0.65, raise: 0.13 },
+                          STRAIGHT_COMPLETE: { fold: 0.25, call: 0.65, raise: 0.10 },
+                          BROADWAY_OVERCARD: { fold: 0.18, call: 0.68, raise: 0.14 },
+                          OVERCARD: { fold: 0.20, call: 0.65, raise: 0.15 },
+                          BOARD_PAIR: { fold: 0.10, call: 0.65, raise: 0.25 },
+                          DYNAMIC_CONNECTOR: { fold: 0.15, call: 0.65, raise: 0.20 } },
+        SECOND_PAIR:    { fold: 0.28, call: 0.62, raise: 0.10,
+                          BRICK: { fold: 0.18, call: 0.68, raise: 0.14 },
+                          LOW_BLANK: { fold: 0.15, call: 0.68, raise: 0.17 },
+                          ACE_OVERCARD: { fold: 0.52, call: 0.45, raise: 0.03 },
+                          FLUSH_COMPLETE: { fold: 0.48, call: 0.50, raise: 0.02 },
+                          STRAIGHT_COMPLETE: { fold: 0.52, call: 0.46, raise: 0.02 },
+                          BROADWAY_OVERCARD: { fold: 0.40, call: 0.56, raise: 0.04 },
+                          OVERCARD: { fold: 0.38, call: 0.58, raise: 0.04 } },
+        THIRD_PAIR:     { fold: 0.55, call: 0.42, raise: 0.03,
+                          BRICK: { fold: 0.40, call: 0.56, raise: 0.04 },
+                          ACE_OVERCARD: { fold: 0.72, call: 0.27, raise: 0.01 },
+                          FLUSH_COMPLETE: { fold: 0.70, call: 0.28, raise: 0.02 } },
+        UNDERPAIR:      { fold: 0.58, call: 0.40, raise: 0.02,
+                          BRICK: { fold: 0.42, call: 0.55, raise: 0.03 },
+                          LOW_BLANK: { fold: 0.38, call: 0.58, raise: 0.04 },
+                          ACE_OVERCARD: { fold: 0.75, call: 0.24, raise: 0.01 },
+                          FLUSH_COMPLETE: { fold: 0.72, call: 0.26, raise: 0.02 } },
+        COMBO_DRAW:     { fold: 0.04, call: 0.45, raise: 0.51,
+                          BRICK: { fold: 0.02, call: 0.35, raise: 0.63 },
+                          FLUSH_COMPLETE: { fold: 0.12, call: 0.58, raise: 0.30 },
+                          STRAIGHT_COMPLETE: { fold: 0.12, call: 0.58, raise: 0.30 },
+                          ACE_OVERCARD: { fold: 0.06, call: 0.44, raise: 0.50 },
+                          DYNAMIC_CONNECTOR: { fold: 0.02, call: 0.35, raise: 0.63 } },
+        STRONG_DRAW:    { fold: 0.08, call: 0.60, raise: 0.32,
+                          BRICK: { fold: 0.04, call: 0.46, raise: 0.50 },
+                          LOW_BLANK: { fold: 0.04, call: 0.44, raise: 0.52 },
+                          FLUSH_COMPLETE: { fold: 0.20, call: 0.68, raise: 0.12 },
+                          STRAIGHT_COMPLETE: { fold: 0.20, call: 0.68, raise: 0.12 },
+                          DYNAMIC_CONNECTOR: { fold: 0.04, call: 0.40, raise: 0.56 } },
+        OESD:           { fold: 0.12, call: 0.65, raise: 0.23,
+                          BRICK: { fold: 0.06, call: 0.56, raise: 0.38 },
+                          FLUSH_COMPLETE: { fold: 0.30, call: 0.65, raise: 0.05 },
+                          STRAIGHT_COMPLETE: { fold: 0.35, call: 0.62, raise: 0.03 } },
+        GUTSHOT:        { fold: 0.38, call: 0.55, raise: 0.07,
+                          BRICK: { fold: 0.22, call: 0.65, raise: 0.13 },
+                          FLUSH_COMPLETE: { fold: 0.55, call: 0.43, raise: 0.02 },
+                          STRAIGHT_COMPLETE: { fold: 0.60, call: 0.38, raise: 0.02 } },
+        ACE_HIGH:       { fold: 0.35, call: 0.50, raise: 0.15,
+                          BRICK: { fold: 0.20, call: 0.52, raise: 0.28 },
+                          LOW_BLANK: { fold: 0.18, call: 0.52, raise: 0.30 },
+                          ACE_OVERCARD: { fold: 0.30, call: 0.55, raise: 0.15 },
+                          FLUSH_COMPLETE: { fold: 0.52, call: 0.44, raise: 0.04 },
+                          STRAIGHT_COMPLETE: { fold: 0.55, call: 0.42, raise: 0.03 } },
+        OVERCARDS:      { fold: 0.58, call: 0.38, raise: 0.04,
+                          BRICK: { fold: 0.38, call: 0.52, raise: 0.10 },
+                          LOW_BLANK: { fold: 0.35, call: 0.53, raise: 0.12 },
+                          ACE_OVERCARD: { fold: 0.55, call: 0.42, raise: 0.03 },
+                          FLUSH_COMPLETE: { fold: 0.72, call: 0.26, raise: 0.02 },
+                          STRAIGHT_COMPLETE: { fold: 0.75, call: 0.24, raise: 0.01 } },
+        AIR:            { fold: 0.72, call: 0.25, raise: 0.03,
+                          BRICK: { fold: 0.55, call: 0.36, raise: 0.09 },
+                          LOW_BLANK: { fold: 0.52, call: 0.38, raise: 0.10 },
+                          FLUSH_COMPLETE: { fold: 0.82, call: 0.17, raise: 0.01 },
+                          STRAIGHT_COMPLETE: { fold: 0.85, call: 0.14, raise: 0.01 },
+                          ACE_OVERCARD: { fold: 0.68, call: 0.30, raise: 0.02 } }
+    };
+
+    const REASONING = {
+        STRAIGHT_FLUSH: 'Straight flush vs a probe — raise for maximum value. Villain is stabbing with wide range.',
+        QUADS:          'Quads — raise for value. Probe bet hands pay off big.',
+        FULL_HOUSE:     'Full house vs probe — raise. Strong enough to get value from villain\'s bluffs.',
+        FLUSH:          'Flush vs probe — raise or call. Value is high even on a wet board.',
+        STRAIGHT:       'Straight — raise for value vs probe. Villain\'s range is wide after check-through.',
+        SET:            'Set vs probe — raise or call. Sets are nutted vs BB\'s probing range.',
+        TRIPS:          'Trips vs probe — raise for value or call to keep draws in.',
+        BOARD_TRIPS:    'Board trips — kicker spot. Call vs probe. Villain has range advantage here.',
+        TWO_PAIR:       'Two pair vs probe — raise or call depending on texture. Solid value hand.',
+        OVERPAIR:       'Overpair vs probe — call on most turns. Raise on brick turns only. Check-through caps your range.',
+        TOP_PAIR:       'Top pair vs probe — call on safe turns, fold on scary turns. Range is capped after check-through.',
+        SECOND_PAIR:    'Second pair vs probe — fold on bad turns, call on brick turns with implied odds.',
+        THIRD_PAIR:     'Third pair vs probe — mostly fold. Too little equity to profitably call often.',
+        UNDERPAIR:      'Underpair vs probe — mostly fold. BB\'s probing range destroys your equity.',
+        COMBO_DRAW:     'Combo draw vs probe — raise for maximum semi-bluff equity.',
+        STRONG_DRAW:    'Flush draw vs probe — call or raise as semi-bluff on safe turns.',
+        OESD:           'OESD vs probe — call with implied odds, raise selectively as semi-bluff.',
+        GUTSHOT:        'Gutshot vs probe — mostly call, occasionally raise as semi-bluff on brick turns.',
+        ACE_HIGH:       'Ace-high vs probe — call on brick turns, fold on scary boards.',
+        OVERCARDS:      'Overcards vs probe — fold on bad turns. Call selectively on brick turns only.',
+        AIR:            'Air vs probe — fold most of the time. Reverse implied odds are severe.'
+    };
+
+    // Per-family small offsets for IP families
+    const FAMILY_OFF = { BTN_vs_BB: 0, CO_vs_BB: -0.02 };
+
+    for (const fam of PROBE_IP_FAMILIES) {
+        const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+        if (!fi) continue;
+        const famOff = FAMILY_OFF[fam] || 0;
+
+        for (const tf of TURN_FAMILIES) {
+            for (const hc of TURN_HAND_CLASSES) {
+                const baseEntry = BASE_IP[hc];
+                if (!baseEntry) continue;
+
+                // Look for texture-specific override first, then _default
+                const tfEntry = baseEntry[tf];
+                let fold, call, raise;
+                if (tfEntry && typeof tfEntry === 'object' && 'fold' in tfEntry) {
+                    fold = tfEntry.fold; call = tfEntry.call; raise = tfEntry.raise;
+                } else {
+                    fold = baseEntry.fold; call = baseEntry.call; raise = baseEntry.raise;
+                }
+                if (fold === undefined) continue;
+
+                // Apply family offset to call frequency (shift between fold and call)
+                call = parseFloat(Math.max(0, Math.min(1, call + famOff)).toFixed(2));
+                fold = parseFloat(Math.max(0, Math.min(1, fold - famOff * 0.5)).toFixed(2));
+                raise = parseFloat(Math.max(0, Math.min(1, raise - famOff * 0.5)).toFixed(2));
+
+                // Normalize to sum to 1
+                const total = fold + call + raise;
+                if (total <= 0) continue;
+                fold  = parseFloat((fold  / total).toFixed(2));
+                call  = parseFloat((call  / total).toFixed(2));
+                raise = parseFloat((1 - fold - call).toFixed(2));
+                fold  = Math.max(0, Math.min(1, fold));
+                call  = Math.max(0, Math.min(1, call));
+                raise = Math.max(0, Math.min(1, raise));
+
+                let preferred;
+                if (fold >= call && fold >= raise) preferred = 'fold';
+                else if (raise >= call && raise >= fold) preferred = 'raise';
+                else preferred = 'call';
+
+                const sk = makeProbeFacingSpotKeyV1({
+                    preflopFamily: fam, positionState: 'IP',
+                    turnFamily: tf, heroHandClass: hc
+                });
+                POSTFLOP_TURN_PROBE_STRATEGY[sk] = {
+                    actions: { fold, call, raise },
+                    preferredAction: preferred,
+                    reasoning: REASONING[hc] || '',
+                    simplification: 'Phase 2: Turn Probe Facing (IP hero)'
+                };
+            }
+        }
+    }
+
+    if (window.RANGE_VALIDATE) {
+        console.log(`[TurnProbe] Built ${Object.keys(POSTFLOP_TURN_PROBE_STRATEGY).length} probe-facing strategy entries.`);
+    }
+})();
+
+// ---- Strategy: BB hero probes turn (bet50 vs check) ----
+// After a flop check-through, BB leads the turn as the OOP uncapped player.
+// BB's range is uncapped (includes strong flop slow-plays + value).
+// Key tendencies vs IP hero's capped range:
+//   - Strong made hands: bet for value.
+//   - Drawing hands: bet as semi-bluffs, especially on favorable textures.
+//   - Marginal made hands: mixed strategy; bet on favorable turns for value/protection.
+//   - Air: bet selectively on turns that miss IP hero's check-through range.
+const POSTFLOP_TURN_PROBE_DEFEND_STRATEGY = {};
+
+(function() {
+    // OOP BB base bet50 frequencies for turn probe
+    // BB is uncapped after flop check-through; can have all strong hands.
+    // Bet frequencies are higher than typical OOP because villain's range is CAPPED.
+    const BASE_OOP = {
+        STRAIGHT_FLUSH: { _default: 0.90 },
+        QUADS:          { _default: 0.88 },
+        FULL_HOUSE:     { _default: 0.88, FLUSH_COMPLETE: 0.80, STRAIGHT_COMPLETE: 0.78 },
+        FLUSH:          { _default: 0.86, FLUSH_COMPLETE: 0.80 },
+        STRAIGHT:       { _default: 0.82 },
+        SET:            { _default: 0.85, FLUSH_COMPLETE: 0.72, STRAIGHT_COMPLETE: 0.68 },
+        TRIPS:          { _default: 0.80, FLUSH_COMPLETE: 0.67, STRAIGHT_COMPLETE: 0.63,
+                          BOARD_PAIR: 0.78, ACE_OVERCARD: 0.72, BROADWAY_OVERCARD: 0.74 },
+        BOARD_TRIPS:    { _default: 0.52, BRICK: 0.57, LOW_BLANK: 0.60, FLUSH_COMPLETE: 0.36,
+                          STRAIGHT_COMPLETE: 0.32, ACE_OVERCARD: 0.44, BROADWAY_OVERCARD: 0.48,
+                          OVERCARD: 0.46, BOARD_PAIR: 0.50, DYNAMIC_CONNECTOR: 0.46 },
+        TWO_PAIR:       { _default: 0.76, FLUSH_COMPLETE: 0.60, STRAIGHT_COMPLETE: 0.58,
+                          ACE_OVERCARD: 0.68, BROADWAY_OVERCARD: 0.70, BRICK: 0.80 },
+        OVERPAIR:       { _default: 0.60, ACE_OVERCARD: 0.38, FLUSH_COMPLETE: 0.46,
+                          STRAIGHT_COMPLETE: 0.42, BROADWAY_OVERCARD: 0.50, OVERCARD: 0.48,
+                          BOARD_PAIR: 0.55, DYNAMIC_CONNECTOR: 0.52,
+                          BRICK: 0.66, LOW_BLANK: 0.68 },
+        TOP_PAIR:       { _default: 0.52, BRICK: 0.60, LOW_BLANK: 0.64, ACE_OVERCARD: 0.32,
+                          FLUSH_COMPLETE: 0.34, STRAIGHT_COMPLETE: 0.30, BROADWAY_OVERCARD: 0.40,
+                          OVERCARD: 0.38, BOARD_PAIR: 0.46, DYNAMIC_CONNECTOR: 0.42 },
+        SECOND_PAIR:    { _default: 0.30, BRICK: 0.40, LOW_BLANK: 0.44, ACE_OVERCARD: 0.15,
+                          FLUSH_COMPLETE: 0.14, STRAIGHT_COMPLETE: 0.12, BROADWAY_OVERCARD: 0.22,
+                          OVERCARD: 0.18, BOARD_PAIR: 0.26, DYNAMIC_CONNECTOR: 0.24 },
+        THIRD_PAIR:     { _default: 0.16, BRICK: 0.24, LOW_BLANK: 0.28, ACE_OVERCARD: 0.08,
+                          FLUSH_COMPLETE: 0.07, STRAIGHT_COMPLETE: 0.06 },
+        UNDERPAIR:      { _default: 0.18, BRICK: 0.26, LOW_BLANK: 0.30, ACE_OVERCARD: 0.08,
+                          FLUSH_COMPLETE: 0.08, STRAIGHT_COMPLETE: 0.06 },
+        COMBO_DRAW:     { _default: 0.68, BRICK: 0.74, FLUSH_COMPLETE: 0.48, STRAIGHT_COMPLETE: 0.48,
+                          ACE_OVERCARD: 0.58, BROADWAY_OVERCARD: 0.62, DYNAMIC_CONNECTOR: 0.76 },
+        STRONG_DRAW:    { _default: 0.56, BRICK: 0.62, LOW_BLANK: 0.66, FLUSH_COMPLETE: 0.38,
+                          STRAIGHT_COMPLETE: 0.36, ACE_OVERCARD: 0.46, BROADWAY_OVERCARD: 0.50,
+                          DYNAMIC_CONNECTOR: 0.68, BOARD_PAIR: 0.52 },
+        OESD:           { _default: 0.44, BRICK: 0.50, LOW_BLANK: 0.54, FLUSH_COMPLETE: 0.28,
+                          STRAIGHT_COMPLETE: 0.26, ACE_OVERCARD: 0.36, BROADWAY_OVERCARD: 0.40 },
+        GUTSHOT:        { _default: 0.24, BRICK: 0.32, LOW_BLANK: 0.36, FLUSH_COMPLETE: 0.13,
+                          STRAIGHT_COMPLETE: 0.11, ACE_OVERCARD: 0.18, BROADWAY_OVERCARD: 0.20 },
+        ACE_HIGH:       { _default: 0.38, BRICK: 0.48, LOW_BLANK: 0.54, ACE_OVERCARD: 0.28,
+                          FLUSH_COMPLETE: 0.18, STRAIGHT_COMPLETE: 0.14, BROADWAY_OVERCARD: 0.32,
+                          OVERCARD: 0.30, BOARD_PAIR: 0.34, DYNAMIC_CONNECTOR: 0.32 },
+        OVERCARDS:      { _default: 0.22, BRICK: 0.32, LOW_BLANK: 0.38, ACE_OVERCARD: 0.12,
+                          FLUSH_COMPLETE: 0.10, STRAIGHT_COMPLETE: 0.08, BROADWAY_OVERCARD: 0.16,
+                          OVERCARD: 0.14, BOARD_PAIR: 0.18, DYNAMIC_CONNECTOR: 0.18 },
+        AIR:            { _default: 0.14, BRICK: 0.22, LOW_BLANK: 0.28, ACE_OVERCARD: 0.07,
+                          FLUSH_COMPLETE: 0.06, STRAIGHT_COMPLETE: 0.05, BROADWAY_OVERCARD: 0.10,
+                          OVERCARD: 0.08, BOARD_PAIR: 0.12, DYNAMIC_CONNECTOR: 0.12 }
+    };
+
+    const REASONING = {
+        STRAIGHT_FLUSH: 'Straight flush after check-through — probe for maximum value. IP hero\'s range is capped.',
+        QUADS:          'Quads — probe for value. Villain cannot have the nuts on a check-through line.',
+        FULL_HOUSE:     'Full house — probe the turn. IP hero\'s range is capped and cannot fight back.',
+        FLUSH:          'Made flush — probe. IP hero checked back to try to keep you in pots.',
+        STRAIGHT:       'Straight — probe for value. Villain\'s capped range will call incorrectly.',
+        SET:            'Set — probe the turn. Strong value bet vs a range that can\'t nutted.',
+        TRIPS:          'Trips — probe for value. Villain\'s check-through range is heavily capped.',
+        BOARD_TRIPS:    'Board trips — probe selectively. This is a showdown-value spot; kicker matters.',
+        TWO_PAIR:       'Two pair — probe for value. BB is uncapped here; bet to build the pot.',
+        OVERPAIR:       'Overpair — probe on favorable turns. As BB you are uncapped with pairs.',
+        TOP_PAIR:       'Top pair — probe on brick turns. Check on dynamic turns where IP may have improved.',
+        SECOND_PAIR:    'Second pair — probe on brick turns for thin value. Check on dangerous turns.',
+        THIRD_PAIR:     'Third pair — mostly check. Probe only on the most favorable brick turns.',
+        UNDERPAIR:      'Underpair — mostly check. Occasional probe only on pure blank turns.',
+        COMBO_DRAW:     'Combo draw — probe as semi-bluff. Excellent equity + fold equity against capped range.',
+        STRONG_DRAW:    'Flush draw — probe on favorable turns. BB is uncapped and can use fold equity.',
+        OESD:           'OESD — probe on safe turns. IP hero\'s capped range gives you fold equity.',
+        GUTSHOT:        'Gutshot — probe selectively on favorable brick turns. Mostly check.',
+        ACE_HIGH:       'Ace-high — probe on brick turns where IP hero\'s capped range folds enough.',
+        OVERCARDS:      'Overcards — probe selectively only on blank turns. Check on dynamic boards.',
+        AIR:            'Air — probe rarely on very favorable blank turns. Mostly check-fold.'
+    };
+
+    // Per-family offsets for probe defender (OOP BB)
+    const FAMILY_OFF = { BTN_vs_BB: 0, CO_vs_BB: -0.02 };
+
+    for (const fam of PROBE_IP_FAMILIES) {
+        const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+        if (!fi) continue;
+        const famOff = FAMILY_OFF[fam] || 0;
+
+        for (const tf of TURN_FAMILIES) {
+            for (const hc of TURN_HAND_CLASSES) {
+                const baseFreqs = BASE_OOP[hc];
+                if (!baseFreqs) continue;
+                const raw = (baseFreqs[tf] !== undefined) ? baseFreqs[tf] : baseFreqs._default;
+                if (raw === undefined) continue;
+                const bet = Math.max(0.05, Math.min(0.95, parseFloat((raw + famOff).toFixed(2))));
+                const chk = parseFloat((1 - bet).toFixed(2));
+                const preferred = bet >= 0.50 ? 'bet50' : 'check';
+                const sk = makeProbeDefendSpotKeyV1({
+                    preflopFamily: fam, positionState: 'OOP',
+                    turnFamily: tf, heroHandClass: hc
+                });
+                POSTFLOP_TURN_PROBE_DEFEND_STRATEGY[sk] = {
+                    actions: { check: chk, bet50: bet },
+                    preferredAction: preferred,
+                    reasoning: REASONING[hc] || '',
+                    simplification: 'Phase 2: Turn Probe Bet (OOP BB)'
+                };
+            }
+        }
+    }
+
+    if (window.RANGE_VALIDATE) {
+        console.log(`[TurnProbeDefend] Built ${Object.keys(POSTFLOP_TURN_PROBE_DEFEND_STRATEGY).length} probe-defend strategy entries.`);
+    }
+})();
+
+// ---- Generator: IP hero faces BB's turn probe ----
+/**
+ * generateTurnProbeSpot — IP PFR faces BB's probe after flop check-through.
+ * Line: SRP → flop checks through → BB probes turn → IP hero responds.
+ * Hero is BTN or CO; uses _dealPostflopHeroHand for IP range.
+ */
+function generateTurnProbeSpot(maxRetries, familyFilter) {
+    maxRetries = maxRetries || 25;
+    let fams = [...PROBE_IP_FAMILIES];
+    if (familyFilter && Array.isArray(familyFilter) && familyFilter.length > 0) {
+        const filtered = fams.filter(f => familyFilter.includes(f));
+        if (filtered.length > 0) fams = filtered;
+    }
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const fam = fams[Math.floor(Math.random() * fams.length)];
+        const fs = _buildBaseFlopState(fam, fi => _dealPostflopHeroHand(fi.heroPos));
+        if (!fs) continue;
+        const ts = _extendFlopStateToTurn(fs);
+        if (!ts) continue;
+
+        const spot = {
+            potType: 'SRP', preflopFamily: fs.preflopFamily, street: 'TURN', heroRole: 'PFR',
+            positionState: 'IP', nodeType: 'TURN_PROBE_FACING_DECISION',
+            flopArchetype: fs.flopArch, boardArchetype: fs.flopArch,
+            turnFamily: ts.turnFamily, heroHandClass: ts.turnHandCls,
+            flopHandClass: fs.flopHandClass,
+            heroPos: fs.heroPos, villainPos: fs.villainPos,
+            flopCards: fs.flopCards, flopClassification: fs.flopClassification,
+            turnCard: ts.turnCard, turnBoard: ts.turnBoard,
+            heroHand: fs.heroHand, heroCards: fs.heroCards,
+            turnTexture: ts.turnTexture,
+            actionHistory: ['FLOP_CHECK', 'FLOP_CHECK_BACK', 'TURN_PROBE'],
+            potSize: null, effectiveStack: 200
+        };
+        spot.spotKey = makeProbeFacingSpotKeyV1(spot);
+        const baseStrat = POSTFLOP_TURN_PROBE_STRATEGY[spot.spotKey] || null;
+        spot.strategy = _enrichTurnDefendStrategy(baseStrat, ts.turnHandCls, ts.turnTexture, 'TURN_PROBE_FACING_DECISION') || baseStrat;
+
+        if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
+    }
+
+    // Last-resort fallback
+    console.warn('[TurnProbe] Retries exhausted; forcing BTN_vs_BB fallback.');
+    const fsFB = _buildBaseFlopState('BTN_vs_BB', () => _dealPostflopHeroHand('BTN')) ||
+        { preflopFamily: 'BTN_vs_BB', positionState: 'IP', heroPos: 'BTN', villainPos: 'BB',
+          heroHand: _concreteHand('AK', true), flopArch: 'A_HIGH_DRY',
+          flopCards: _generateFlopNoConflict('A_HIGH_DRY', _concreteHand('AK', true)),
+          flopHandClass: 'AIR', flopClassification: {} };
+    fsFB.heroCards = fsFB.heroHand.cards;
+    const tsFB = _extendFlopStateToTurn(fsFB) ||
+        { turnCard: { rank: '2', suit: 'c' }, turnBoard: [...(fsFB.flopCards || []), { rank: '2', suit: 'c' }],
+          turnFamily: 'BRICK', turnHandCls: 'AIR', turnTexture: null };
+    const spot = {
+        potType: 'SRP', preflopFamily: fsFB.preflopFamily, street: 'TURN', heroRole: 'PFR',
+        positionState: 'IP', nodeType: 'TURN_PROBE_FACING_DECISION',
+        flopArchetype: fsFB.flopArch, boardArchetype: fsFB.flopArch,
+        turnFamily: tsFB.turnFamily, heroHandClass: tsFB.turnHandCls,
+        flopHandClass: fsFB.flopHandClass,
+        heroPos: fsFB.heroPos, villainPos: fsFB.villainPos,
+        flopCards: fsFB.flopCards, flopClassification: fsFB.flopClassification,
+        turnCard: tsFB.turnCard, turnBoard: tsFB.turnBoard,
+        heroHand: fsFB.heroHand, heroCards: fsFB.heroCards,
+        turnTexture: tsFB.turnTexture,
+        actionHistory: ['FLOP_CHECK', 'FLOP_CHECK_BACK', 'TURN_PROBE'],
+        potSize: null, effectiveStack: 200
+    };
+    spot.spotKey = makeProbeFacingSpotKeyV1(spot);
+    const baseStratFB = POSTFLOP_TURN_PROBE_STRATEGY[spot.spotKey] || null;
+    spot.strategy = _enrichTurnDefendStrategy(baseStratFB, tsFB.turnHandCls, tsFB.turnTexture, 'TURN_PROBE_FACING_DECISION') || baseStratFB;
+    return spot;
+}
+
+// ---- Generator: BB hero probes turn ----
+/**
+ * generateTurnProbeDefendSpot — BB hero leads turn after flop check-through.
+ * Line: SRP → flop checks through → BB hero decides bet vs check on turn.
+ * Hero is BB; uses _dealDefenderHeroHand for OOP calling range.
+ */
+function generateTurnProbeDefendSpot(maxRetries, familyFilter) {
+    maxRetries = maxRetries || 25;
+    let fams = [...PROBE_IP_FAMILIES];
+    if (familyFilter && Array.isArray(familyFilter) && familyFilter.length > 0) {
+        const filtered = fams.filter(f => familyFilter.includes(f));
+        if (filtered.length > 0) fams = filtered;
+    }
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const fam = fams[Math.floor(Math.random() * fams.length)];
+        // fi.heroPos is the IP PFR — the villain for this scenario
+        const fs = _buildBaseFlopState(fam, fi => _dealDefenderHeroHand(fi.heroPos));
+        if (!fs) continue;
+        const ts = _extendFlopStateToTurn(fs);
+        if (!ts) continue;
+
+        const spot = {
+            potType: 'SRP', preflopFamily: fs.preflopFamily, street: 'TURN', heroRole: 'DEFENDER',
+            positionState: 'OOP', nodeType: 'TURN_PROBE_BET_DECISION',
+            flopArchetype: fs.flopArch, boardArchetype: fs.flopArch,
+            turnFamily: ts.turnFamily, heroHandClass: ts.turnHandCls,
+            flopHandClass: fs.flopHandClass,
+            heroPos: 'BB', villainPos: fs.heroPos,
+            flopCards: fs.flopCards, flopClassification: fs.flopClassification,
+            turnCard: ts.turnCard, turnBoard: ts.turnBoard,
+            heroHand: fs.heroHand, heroCards: fs.heroCards,
+            turnTexture: ts.turnTexture,
+            actionHistory: ['FLOP_CHECK', 'FLOP_CHECK_BACK'],
+            potSize: null, effectiveStack: 200
+        };
+        spot.spotKey = makeProbeDefendSpotKeyV1(spot);
+        const baseStrat = POSTFLOP_TURN_PROBE_DEFEND_STRATEGY[spot.spotKey] || null;
+        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, ts.turnHandCls, ts.turnTexture, 'TURN_PROBE_BET_DECISION') || baseStrat;
+
+        if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
+    }
+
+    // Last-resort fallback
+    console.warn('[TurnProbeDefend] Retries exhausted; forcing BTN_vs_BB fallback.');
+    const fbHeroHand = _dealDefenderHeroHand('BTN') || _concreteHand('AJs', true);
+    const fsFB = _buildBaseFlopState('BTN_vs_BB', () => fbHeroHand) ||
+        { preflopFamily: 'BTN_vs_BB', positionState: 'IP', heroPos: 'BTN', villainPos: 'BB',
+          heroHand: fbHeroHand, flopArch: 'A_HIGH_DRY',
+          flopCards: _generateFlopNoConflict('A_HIGH_DRY', fbHeroHand),
+          flopHandClass: 'AIR', flopClassification: {} };
+    fsFB.heroCards = fsFB.heroHand.cards;
+    const tsFB = _extendFlopStateToTurn(fsFB) ||
+        { turnCard: { rank: '2', suit: 'c' }, turnBoard: [...(fsFB.flopCards || []), { rank: '2', suit: 'c' }],
+          turnFamily: 'BRICK', turnHandCls: 'AIR', turnTexture: null };
+    const spot = {
+        potType: 'SRP', preflopFamily: fsFB.preflopFamily, street: 'TURN', heroRole: 'DEFENDER',
+        positionState: 'OOP', nodeType: 'TURN_PROBE_BET_DECISION',
+        flopArchetype: fsFB.flopArch, boardArchetype: fsFB.flopArch,
+        turnFamily: tsFB.turnFamily, heroHandClass: tsFB.turnHandCls,
+        flopHandClass: fsFB.flopHandClass,
+        heroPos: 'BB', villainPos: fsFB.heroPos,
+        flopCards: fsFB.flopCards, flopClassification: fsFB.flopClassification,
+        turnCard: tsFB.turnCard, turnBoard: tsFB.turnBoard,
+        heroHand: fsFB.heroHand, heroCards: fsFB.heroCards,
+        turnTexture: tsFB.turnTexture,
+        actionHistory: ['FLOP_CHECK', 'FLOP_CHECK_BACK'], potSize: null, effectiveStack: 200
+    };
+    spot.spotKey = makeProbeDefendSpotKeyV1(spot);
+    const baseStratFB = POSTFLOP_TURN_PROBE_DEFEND_STRATEGY[spot.spotKey] || null;
+    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, tsFB.turnHandCls, tsFB.turnTexture, 'TURN_PROBE_BET_DECISION') || baseStratFB;
+    return spot;
+}
+
+/**
+ * scoreTurnProbeAction — score IP hero's fold/call/raise vs BB probe.
+ * Delegates to scoreTurnDefenderAction since the action mapping is identical.
+ */
+function scoreTurnProbeAction(playerAction, strategy, spot) {
+    return scoreTurnDefenderAction(playerAction, strategy, spot);
+}
+
+/**
+ * scoreTurnProbeDefendAction — score BB hero's bet/check probe decision.
+ * Delegates to scoreTurnAction (same bet50/check mapping as barrel/delayed-cbet).
+ */
+function scoreTurnProbeDefendAction(playerAction, strategy, spot) {
+    return scoreTurnAction(playerAction, strategy, spot);
+}
