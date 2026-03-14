@@ -1491,80 +1491,133 @@ const HAND_CLASS_LABELS = {
 };
 
 /**
+ * _rawToFlopBucket — map a raw evaluateRawHand result to a flop strategy bucket.
+ * Uses the same structural logic as _rawToTrainerBucket but outputs the flop-specific
+ * bucket names that POSTFLOP_STRATEGY_V2 (c-bet) and POSTFLOP_DEFEND_STRATEGY are keyed on:
+ *   SET, TWO_PAIR_PLUS, OVERPAIR, TOP_PAIR, SECOND_PAIR, THIRD_PAIR, UNDERPAIR, AIR
+ *
+ * Returns null for HIGH_CARD (caller handles draw classification).
+ * Note: STRAIGHT_FLUSH / QUADS / FULL_HOUSE / FLUSH / STRAIGHT are rare on the flop and
+ * map to the nearest flop bucket that captures correct strategy: TWO_PAIR_PLUS for strong
+ * made hands where no finer bucket exists on the flop table.
+ */
+function _rawToFlopBucket(rawResult, heroCards, boardCards) {
+    const { rank } = rawResult;
+
+    // Rank 9: straight flush (extremely rare on flop — treat as SET-tier strong made hand)
+    if (rank === 9) return 'SET';
+
+    // Rank 8: quads
+    if (rank === 8) return 'TWO_PAIR_PLUS';
+
+    // Rank 7: full house
+    if (rank === 7) return 'TWO_PAIR_PLUS';
+
+    // Rank 6: flush
+    if (rank === 6) return 'TWO_PAIR_PLUS';
+
+    // Rank 5: straight
+    if (rank === 5) return 'TWO_PAIR_PLUS';
+
+    // Rank 4: trips — distinguish SET (pocket pair) vs bare trips on paired board
+    if (rank === 4) {
+        const h1 = RANK_NUM[heroCards[0].rank], h2 = RANK_NUM[heroCards[1].rank];
+        return (h1 === h2) ? 'SET' : 'TWO_PAIR_PLUS'; // trips on flop w/ one hole card = strong value
+    }
+
+    // Rank 3: two pair
+    if (rank === 3) {
+        const h1 = RANK_NUM[heroCards[0].rank], h2 = RANK_NUM[heroCards[1].rank];
+        const isPocket = h1 === h2;
+        if (isPocket) {
+            // Pocket pair + board pair → not hero's two-pair; route to OVERPAIR or UNDERPAIR
+            const bFreq = _boardRankFreqs(boardCards);
+            const bTop = [...bFreq.keys()].sort((a, b) => b - a)[0];
+            return h1 > bTop ? 'OVERPAIR' : 'UNDERPAIR';
+        }
+        return 'TWO_PAIR_PLUS';
+    }
+
+    // Rank 2: one pair — OVERPAIR / TOP_PAIR / SECOND_PAIR / THIRD_PAIR / UNDERPAIR
+    if (rank === 2) {
+        const h1 = RANK_NUM[heroCards[0].rank], h2 = RANK_NUM[heroCards[1].rank];
+        const hHigh = Math.max(h1, h2);
+        const isPocket = h1 === h2;
+        const bFreq = _boardRankFreqs(boardCards);
+        const bRanksSorted = [...bFreq.keys()].sort((a, b) => b - a);
+        const bTop = bRanksSorted[0];
+
+        if (isPocket) {
+            return hHigh > bTop ? 'OVERPAIR' : 'UNDERPAIR';
+        }
+
+        const hLow = Math.min(h1, h2);
+        const matchHigh = bFreq.get(hHigh) || 0;
+        const pairedRank = matchHigh >= 1 ? hHigh : hLow;
+        const bDistinct = [...new Set([...boardCards.map(c => RANK_NUM[c.rank])])].sort((a, b) => b - a);
+        if (pairedRank === bDistinct[0]) return 'TOP_PAIR';
+        if (bDistinct[1] !== undefined && pairedRank === bDistinct[1]) return 'SECOND_PAIR';
+        if (bDistinct[2] !== undefined && pairedRank === bDistinct[2]) return 'THIRD_PAIR';
+        return 'UNDERPAIR';
+    }
+
+    // Rank 1: HIGH_CARD — caller handles draw classification
+    return null;
+}
+
+/**
  * classifyFlopHand — classify hero's hand on the flop.
  * heroHand: { rank1, rank2, suited } (abstract) or { cards: [{rank,suit},{rank,suit}] } (concrete)
  * flopCards: array of {rank, suit}
- * Returns a string hand class.
+ * Returns a string hand class matching POSTFLOP_STRATEGY_V2 bucket keys.
+ *
+ * Architecture (unified with classifyTurnHand):
+ *   1. evaluateRawHand  → raw rank/label
+ *   2. _rawToFlopBucket → flop-specific trainer bucket (made hands)
+ *   3. Draw classification for HIGH_CARD / no made pair
  */
 function classifyFlopHand(heroHand, flopCards) {
     const hr = heroHand.cards || _heroHandToCards(heroHand);
+
+    // --- Layer 1: raw made-hand evaluation ---
+    const raw = evaluateRawHand(hr, flopCards);
+
+    // --- Layer 2: map to flop bucket if a made hand is present ---
+    if (raw.rank >= 2) {
+        return _rawToFlopBucket(raw, hr, flopCards);
+    }
+
+    // --- No made pair: draw classification (unchanged from legacy) ---
     const h1 = RANK_NUM[hr[0].rank], h2 = RANK_NUM[hr[1].rank];
     const hHigh = Math.max(h1, h2), hLow = Math.min(h1, h2);
     const hSuited = hr[0].suit === hr[1].suit;
     const hSuit = hSuited ? hr[0].suit : null;
 
-    const fRanks = flopCards.map(c => RANK_NUM[c.rank]).sort((a,b) => b - a);
+    const fRanks = flopCards.map(c => RANK_NUM[c.rank]).sort((a, b) => b - a);
     const fSuits = flopCards.map(c => c.suit);
-    const flopTop = fRanks[0], flopMid = fRanks[1], flopBot = fRanks[2];
+    const flopTop = fRanks[0];
 
-    // Count how many board cards match each hero rank
-    const matchHigh = fRanks.filter(r => r === hHigh).length;
-    const matchLow = fRanks.filter(r => r === hLow).length;
-    const isPocket = hHigh === hLow;
-
-    // --- Made hands (strongest first) ---
-
-    // Set: hero has a pocket pair that matches a board card
-    if (isPocket && matchHigh >= 1) return 'SET';
-
-    // Two pair+: both hero ranks match board cards (and hero is not paired)
-    if (!isPocket && matchHigh >= 1 && matchLow >= 1) return 'TWO_PAIR_PLUS';
-
-    // Overpair: pocket pair above the top board card
-    if (isPocket && hHigh > flopTop) return 'OVERPAIR';
-
-    // Top pair: one hero card matches the highest board rank
-    if (matchHigh >= 1 && hHigh === flopTop) return 'TOP_PAIR';
-    if (matchLow >= 1 && hLow === flopTop) return 'TOP_PAIR';
-
-    // Second pair: hero matches the second-highest board rank
-    if (matchHigh >= 1 && hHigh === flopMid) return 'SECOND_PAIR';
-    if (matchLow >= 1 && hLow === flopMid) return 'SECOND_PAIR';
-
-    // Third pair / bottom pair: hero matches the lowest board rank
-    if (matchHigh >= 1 && hHigh === flopBot) return 'THIRD_PAIR';
-    if (matchLow >= 1 && hLow === flopBot) return 'THIRD_PAIR';
-
-    // Pocket pairs that don't match the board
-    if (isPocket) {
-        if (hHigh < flopBot) return 'UNDERPAIR';
-        return 'UNDERPAIR'; // mid-pocket pairs between board cards
-    }
-
-    // --- Draws ---
-    const allRanks = [hHigh, hLow, ...fRanks].sort((a,b) => b - a);
-    const uniqueRanks = [...new Set(allRanks)].sort((a,b) => b - a);
-    const hasFlushDraw = _countSuitOnBoard(hSuit, fSuits) >= 2 && hSuited;
+    const allRanks = [hHigh, hLow, ...fRanks].sort((a, b) => b - a);
+    const uniqueRanks = [...new Set(allRanks)].sort((a, b) => b - a);
+    const hasFlushDraw = hSuited && _countSuitOnBoard(hSuit, fSuits) >= 2;
     const hasBackdoorFD = hSuited && _countSuitOnBoard(hSuit, fSuits) === 1;
     const straightInfo = _straightDrawType(uniqueRanks);
     const hasOESD = straightInfo === 'OESD';
     const hasGutshot = straightInfo === 'GUTSHOT';
 
-    // Nut flush draw: suited hand with 2+ matching suits on board
+    // Nut flush draw: ace or king-high flush draw with no higher flush card on board
     const isNFD = hasFlushDraw && (hHigh === 14 || (hHigh >= 13 && _highestFlushCardOnBoard(hSuit, flopCards) < hHigh));
 
-    // Combo draw: flush draw + straight draw
     if (hasFlushDraw && (hasOESD || hasGutshot)) return 'COMBO_DRAW';
     if (isNFD) return 'NFD';
     if (hasFlushDraw) return 'FD';
     if (hasOESD) return 'OESD';
     if (hasGutshot) return 'GUTSHOT';
 
-    // Ace-high with backdoor equity
-    if (hHigh === 14 && (hasBackdoorFD || hasGutshot)) return 'ACE_HIGH_BACKDOOR';
-    if (hHigh === 14) return 'ACE_HIGH_BACKDOOR'; // Ace-high no pair still has some showdown
+    // Ace-high (with or without backdoor equity)
+    if (hHigh === 14) return 'ACE_HIGH_BACKDOOR';
 
-    // Overcards: both hero cards above the top board card (no pair, no draw)
+    // Overcards: both hero cards above flop top
     if (hHigh > flopTop && hLow > flopTop) return 'OVERCARDS';
 
     return 'AIR';
