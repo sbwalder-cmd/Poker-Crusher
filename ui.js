@@ -224,10 +224,10 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
         const bbCoords = getSeatCoords(heroPos, 'BB');
 
         if (scenario !== 'RFI_VS_3BET') {
-            animateChip(betsLayer, sbCoords, 0.5, '$1');
+            animateChip(betsLayer, sbCoords, 0.5, formatAmt(getSmallBlind$()));
             showActionBadge(document.getElementById('seat-SB'), 'BLIND', 'badge-blind', 600);
             await delay(200);
-            animateChip(betsLayer, bbCoords, 1, '$3');
+            animateChip(betsLayer, bbCoords, 1, formatAmt(getBigBlind$()));
             showActionBadge(document.getElementById('seat-BB'), 'BLIND', 'badge-blind', 600);
             await delay(350);
         }
@@ -268,7 +268,7 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
             // Raiser raises
             const oppCoords = getSeatCoords(heroPos, oppPos);
             animateChip(betsLayer, oppCoords, getVillainOpenSize$() / BB_DOLLARS);
-            showActionBadge(document.getElementById(`seat-${oppPos}`), 'RAISE ' + fmt$(getVillainOpenSize$()), 'badge-raise', 700);
+            showActionBadge(document.getElementById(`seat-${oppPos}`), 'RAISE ' + formatAmt(getVillainOpenSize$()), 'badge-raise', 700);
             await delay(300);
             // Fold positions between raiser and hero
             for (let k = oppActionIdx + 1; k < 8; k++) {
@@ -301,7 +301,7 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
             // Hero raises
             const heroCoords = getSeatCoords(heroPos, heroPos);
             animateChip(betsLayer, heroCoords, getOpenSizeBB());
-            showActionBadge(document.getElementById(`seat-${heroPos}`), 'RAISE ' + fmt$(getOpenSize$()), 'badge-raise', 700);
+            showActionBadge(document.getElementById(`seat-${heroPos}`), 'RAISE ' + formatAmt(getOpenSize$()), 'badge-raise', 700);
             await delay(300);
             // Fold between hero and 3bettor
             for (let k = heroActionIdx + 1; k < 8; k++) {
@@ -320,7 +320,7 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
             const threeBetAnim$ = get3betSize$(oppPos, heroPos);
             const threeBetAnimBB = threeBetAnim$ / BB_DOLLARS;
             animateChip(betsLayer, oppCoords, threeBetAnimBB);
-            showActionBadge(document.getElementById(`seat-${oppPos}`), '3-BET ' + fmt$(threeBetAnim$), 'badge-3bet', 800);
+            showActionBadge(document.getElementById(`seat-${oppPos}`), '3-BET ' + formatAmt(threeBetAnim$), 'badge-3bet', 800);
             await delay(400);
         } else if (scenario === 'VS_LIMP') {
             // Multi-limp animation: fold to first limper, each limper limps, fold between, hero acts
@@ -403,7 +403,7 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
             }
             const openerCoords = getSeatCoords(heroPos, opener);
             animateChip(betsLayer, openerCoords, getVillainOpenSize$() / BB_DOLLARS);
-            showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + fmt$(getVillainOpenSize$()), 'badge-raise', 700);
+            showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + formatAmt(getVillainOpenSize$()), 'badge-raise', 700);
             await delay(300);
             for (let k = openerIdx + 1; k < callerIdx; k++) {
                 const foldPos = actionOrder[k];
@@ -454,7 +454,7 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
             }
             // Opener raises
             animateChip(betsLayer, getSeatCoords(heroPos, opener), getVillainOpenSize$() / BB_DOLLARS);
-            showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + fmt$(getVillainOpenSize$()), 'badge-raise', 700);
+            showActionBadge(document.getElementById(`seat-${opener}`), 'RAISE ' + formatAmt(getVillainOpenSize$()), 'badge-raise', 700);
             await delay(300);
             // Fold between opener and caller1
             for (let k = openerIdx + 1; k < c1Idx; k++) {
@@ -569,22 +569,55 @@ function flipHeroCards() {
 
 
 // ==============================
-// Live $1/$3 visual bet sizing (display-only)
+// Stake-aware sizing + display helpers
 // ==============================
-const STAKES = { SB: 1, BB: 3 };
-const BB_DOLLARS = 3; // 1bb = $3
+
+// Current stake preset accessors (safe — default to 1/3 if STAKE_PRESETS not loaded yet)
+function getCurrentStakePreset() {
+    if (typeof STAKE_PRESETS !== 'undefined' && typeof sessionBuilder !== 'undefined' && sessionBuilder.stakeId) {
+        return STAKE_PRESETS[sessionBuilder.stakeId] || STAKE_PRESETS['1/3'];
+    }
+    return { id:'1/3', sb:1, bb:3, defaultOpen:15, villainOpenPool:[6,10,12,12,15,15,15,15,15,15,17,18,20,25] };
+}
+function getSmallBlind$()  { return getCurrentStakePreset().sb; }
+function getBigBlind$()    { return getCurrentStakePreset().bb; }
+function getBlindTotal$()  { return getSmallBlind$() + getBigBlind$(); }
+
+// BB_DOLLARS kept as a dynamic getter alias so all existing callers (bbTo$, getOpenSizeBB, etc.) work unchanged
+function _currentBBDollars() { return getBigBlind$(); }
+// Shim: code that reads BB_DOLLARS directly via the old constant gets the live value via a getter.
+// We shadow the old const with a property on window so existing reads are intercepted.
+Object.defineProperty(window, 'BB_DOLLARS', { get: _currentBBDollars, configurable: true });
 
 function roundLiveDollars(n) {
-// Under $30: nearest $1. $30+: nearest $5 (live realism).
-if (!isFinite(n)) return n;
-if (n < 30) return Math.round(n);
-return Math.round(n / 5) * 5;
+    // Under $30: nearest $1. $30+: nearest $5 (live realism).
+    if (!isFinite(n)) return n;
+    if (n < 30) return Math.round(n);
+    return Math.round(n / 5) * 5;
 }
 
 function fmt$(n) {
-const v = roundLiveDollars(n);
-return `$${v}`;
+    const v = roundLiveDollars(n);
+    return `$${v}`;
 }
+
+// Central user-facing amount formatter.
+// displayMode = 'dollars' → "$15"  |  displayMode = 'bb' → "5bb"
+function formatAmt(dollars) {
+    const mode = (typeof sessionBuilder !== 'undefined') ? sessionBuilder.displayMode : 'dollars';
+    if (mode === 'bb') {
+        const bb = getBigBlind$();
+        if (!bb) return fmt$(dollars);
+        const bbs = dollars / bb;
+        // Show clean decimals: whole numbers, or .5
+        const rounded = Math.round(bbs * 2) / 2;
+        return `${rounded}bb`;
+    }
+    return fmt$(dollars);
+}
+
+// formatAmt for pot badge (same logic, exposed as alias for clarity)
+function formatPot(dollars) { return formatAmt(dollars); }
 
 // --- Hero bet slide animation (visual-only) ---
 function _heroSeatPct(pos){
@@ -640,7 +673,7 @@ betDiv.className = 'hero-bet-anim';
 betDiv.style.left = start.left + '%';
 betDiv.style.top = start.top + '%';
 betDiv.innerHTML = `<div style="width:var(--chip-size,16px);height:var(--chip-size,16px);" class="rounded-full bg-indigo-500 border border-white/20"></div>
-    <span style="font-size:var(--chip-font,9px);" class="font-black text-yellow-400 bg-black/40 px-1 rounded">${fmt$(amountDollars)}</span>`;
+    <span style="font-size:var(--chip-font,9px);" class="font-black text-yellow-400 bg-black/40 px-1 rounded">${formatAmt(amountDollars)}</span>`;
 betsLayer.appendChild(betDiv);
 
 requestAnimationFrame(() => {
@@ -688,7 +721,7 @@ return null;
 }
 
 function bbTo$(bb) {
-return fmt$(bb * BB_DOLLARS);
+return formatAmt(bb * getBigBlind$());
 }
 
 function postflopIP(heroPos, oppPos) {
@@ -697,8 +730,8 @@ const ORDER = ['SB','BB','UTG','UTG1','UTG2','LJ','HJ','CO','BTN'];
 return ORDER.indexOf(heroPos) > ORDER.indexOf(oppPos);
 }
 
-function getOpenSize$() { return (state && state.config && state.config.openSize) ? state.config.openSize : 15; } // reads from config
-function getOpenSizeBB() { return getOpenSize$() / BB_DOLLARS; } // = 5bb
+function getOpenSize$() { return (state && state.config && state.config.openSize) ? state.config.openSize : getCurrentStakePreset().defaultOpen; } // reads from config
+function getOpenSizeBB() { return getOpenSize$() / getBigBlind$(); } // = 5bb
 
 // ---------------------------------------------------------------------------
 // Central pot display helpers
@@ -709,7 +742,7 @@ function getOpenSizeBB() { return getOpenSize$() / BB_DOLLARS; } // = 5bb
 function getScenarioPot$(scenario) {
     const open$ = getOpenSize$();
     const villain$ = getVillainOpenSize$();
-    const blinds$ = 4; // $1 SB + $3 BB always dead or posted
+    const blinds$ = getBlindTotal$(); // SB + BB — stake-aware
 
     if (scenario === 'RFI') {
         // Blinds only — hero hasn't committed yet
@@ -722,12 +755,12 @@ function getScenarioPot$(scenario) {
     if (scenario === 'RFI_VS_3BET' || scenario === 'RFI_VS_3') {
         // Hero open + villain 3-bet + dead SB ($1); villain is typically BB so already counted in 3-bet
         const threeBet$ = get3betSize$(state.oppPos, state.currentPos || state.heroPos || 'BTN');
-        return open$ + threeBet$ + 1; // $1 dead SB
+        return open$ + threeBet$ + getSmallBlind$(); // dead SB
     }
     if (scenario === 'VS_LIMP') {
-        // Each limper called 1BB ($3) + SB ($1) + BB ($3)
+        // Each limper called 1BB + SB + BB
         const limpers = (state.limperPositions && state.limperPositions.length) || 1;
-        return limpers * BB_DOLLARS + blinds$;
+        return limpers * getBigBlind$() + blinds$;
     }
     if (scenario === 'SQUEEZE') {
         // Opener + 1 caller + blinds
@@ -772,9 +805,10 @@ function getScenarioPot$(scenario) {
 // Pot size for a SRP (Single Raised Pot) heading into the flop.
 // Dead money (folded blinds) differs by preflop family.
 function getSRPPot$(preflopFamily) {
-    const dead = { BTN_vs_BB:1, CO_vs_BB:1, HJ_vs_BB:1, LJ_vs_BB:1, UTG_vs_BB:1,
-                   SB_vs_BB:0, BTN_vs_SB:3, CO_vs_BTN:4 };
-    return getOpenSize$() * 2 + (dead[preflopFamily] !== undefined ? dead[preflopFamily] : 1);
+    const sb = getSmallBlind$();
+    const dead = { BTN_vs_BB:sb, CO_vs_BB:sb, HJ_vs_BB:sb, LJ_vs_BB:sb, UTG_vs_BB:sb,
+                   SB_vs_BB:0, BTN_vs_SB:getBigBlind$(), CO_vs_BTN:getBlindTotal$() };
+    return getOpenSize$() * 2 + (dead[preflopFamily] !== undefined ? dead[preflopFamily] : sb);
 }
 
 // Render a single central pot badge on the felt — positioned above community cards
@@ -796,7 +830,7 @@ function renderPotBadge(betsLayer, total$) {
         `class="rounded-full bg-amber-500 border-2 border-white/30 shadow-md"></div>` +
         `<span style="font-size:var(--chip-font,9px);" ` +
         `class="font-black text-amber-300 bg-black/60 px-1.5 py-0.5 rounded-full whitespace-nowrap">` +
-        `$${total$}</span>`;
+        `${formatPot(total$)}</span>`;
     betsLayer.appendChild(badge);
 }
 
@@ -855,16 +889,15 @@ function renderVillainBet(betsLayer, heroPos, villainPos, betAmount$) {
     el.innerHTML =
         `<div style="width:var(--chip-size,16px);height:var(--chip-size,16px);" ` +
         `class="rounded-full bg-rose-600 border-2 border-white/20 shadow-md"></div>` +
-        `<span style="font-size:var(--chip-font,9px);" class="font-black text-yellow-400 bg-black/40 px-1 rounded">$${betAmount$}</span>`;
+        `<span style="font-size:var(--chip-font,9px);" class="font-black text-yellow-400 bg-black/40 px-1 rounded">${formatAmt(betAmount$)}</span>`;
     betsLayer.appendChild(el);
 }
 
-// Villain open size: randomized per-hand from a realistic 1/3 pool.
-// Pool weighted toward $15 (most common), but includes the full range you'll face.
-// 1/3 live open distribution: $6 min-raise (rare), $10-12 tight, $15 standard (most common), $17-18 occasional, $20 splashy (uncommon), $25 very rare
-const VILLAIN_OPEN_POOL = [6, 10, 12, 12, 15, 15, 15, 15, 15, 15, 17, 18, 20, 25];
+// Villain open size: randomized per-hand from a realistic pool for the current stake.
+// Pool is defined in STAKE_PRESETS per game type.
 function pickVillainOpenSize() {
-return VILLAIN_OPEN_POOL[Math.floor(Math.random() * VILLAIN_OPEN_POOL.length)];
+    const pool = getCurrentStakePreset().villainOpenPool;
+    return pool[Math.floor(Math.random() * pool.length)];
 }
 function getVillainOpenSize$() {
 return (state && state.villainOpenSize) ? state.villainOpenSize : 15;
@@ -873,7 +906,7 @@ return (state && state.villainOpenSize) ? state.villainOpenSize : 15;
 function getIsoSize$(numLimpers) {
 // Iso = 5bb + 1bb per limper
 const bb = 5 + (numLimpers || 0);
-return bb * BB_DOLLARS;
+return bb * getBigBlind$();
 }
 
 
@@ -921,8 +954,8 @@ const openBB = getOpenSizeBB();
 const limpers = (state.limperPositions && Array.isArray(state.limperPositions)) ? state.limperPositions.length : 1;
 
 if (state.scenario === 'RFI') {
-const raiseMain = `RAISE TO ${fmt$(open$)}`;
-const raiseHint = `Open: 5bb (${openBB.toFixed(0)}bb)`;
+const raiseMain = `RAISE TO ${formatAmt(open$)}`;
+const raiseHint = `Open: ${openBB.toFixed(0)}bb`;
 setSizingHint(raiseHint);
 container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${stateClass}">
     <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
@@ -932,8 +965,8 @@ container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${stateClass}">
 const villainOpen$ = getVillainOpenSize$();
 const threeBet$ = get3betSize$(state.currentPos, state.oppPos, villainOpen$);
 const isIP = postflopIP(state.currentPos, state.oppPos);
-const threeMain = `3-BET TO ${fmt$(threeBet$)}`;
-const threeHint = isIP ? `IP 3-bet: 3× open (${fmt$(villainOpen$)})` : `OOP 3-bet: 4× open (${fmt$(villainOpen$)})`;
+const threeMain = `3-BET TO ${formatAmt(threeBet$)}`;
+const threeHint = isIP ? `IP 3-bet: 3× open (${formatAmt(villainOpen$)})` : `OOP 3-bet: 4× open (${formatAmt(villainOpen$)})`;
 setSizingHint(threeHint);
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
     <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
@@ -949,7 +982,7 @@ const raiseAction = 'ISO';
 const raiseLabel = (isSB || isBB) ? 'RAISE' : 'ISO RAISE';
 
 const iso$ = getIsoSize$(limpers);
-const isoMain = `${raiseLabel} TO ${fmt$(iso$)}`;
+const isoMain = `${raiseLabel} TO ${formatAmt(iso$)}`;
 const isoHint = `Iso: 5bb + 1bb/limper (${limpers} limper${limpers===1?'':'s'})`;
 setSizingHint(isoHint);
 
@@ -964,8 +997,8 @@ const opener = state.squeezeOpener || state.oppPos; // opener seat if tracked
 const villainOpen$ = getVillainOpenSize$();
 const squeeze$ = getSqueezeSize$(state.currentPos, opener, callers, villainOpen$);
 const isIP = postflopIP(state.currentPos, opener);
-const main = `SQUEEZE TO ${fmt$(squeeze$)}`;
-const hint = isIP ? `IP squeeze: 3.5× + 1×/caller off ${fmt$(villainOpen$)} open` : `OOP squeeze: 4.5× + 1×/caller off ${fmt$(villainOpen$)} open`;
+const main = `SQUEEZE TO ${formatAmt(squeeze$)}`;
+const hint = isIP ? `IP squeeze: 3.5× + 1×/caller off ${formatAmt(villainOpen$)} open` : `OOP squeeze: 4.5× + 1×/caller off ${formatAmt(villainOpen$)} open`;
 setSizingHint(hint);
 
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
@@ -979,18 +1012,18 @@ container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
 const threeBet$ = get3betSize$(state.oppPos, state.currentPos); // villain 3-bet size vs our open
 const heroIP = postflopIP(state.currentPos, state.oppPos);
 const fourBet$ = get4betSize$(state.currentPos, state.oppPos);
-const hint = heroIP ? `IP 4-bet: 2.2× 3-bet (${fmt$(threeBet$)})` : `OOP 4-bet: 2.5× 3-bet (${fmt$(threeBet$)})`;
+const hint = heroIP ? `IP 4-bet: 2.2× 3-bet (${formatAmt(threeBet$)})` : `OOP 4-bet: 2.5× 3-bet (${formatAmt(threeBet$)})`;
 setSizingHint(hint);
 
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
     <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
     <button onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
-    <button onclick="handleInput('4BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">4-BET TO ${fmt$(fourBet$)}</button>
+    <button onclick="handleInput('4BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">4-BET TO ${formatAmt(fourBet$)}</button>
 </div>`;
 
 } else if (state.scenario === 'PUSH_FOLD') {
-const bb$ = (state.stackBB || 10) * 3; // approx $ at 1/3
-setSizingHint(`Shoving ${state.stackBB}BB (~$${bb$} at 1/3)`);
+const shove$ = (state.stackBB || 10) * getBigBlind$();
+setSizingHint(`Shoving ${state.stackBB}BB (${formatAmt(shove$)})`);
 container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${stateClass}">
     <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
     <button onclick="handleInput('SHOVE')" ${btnStyle} class="bg-rose-600 rounded-2xl font-black text-white shadow-lg">ALL IN</button>
@@ -2141,6 +2174,46 @@ function drilldownSpot(spotKey) {
 })();
 
 window.onload = function(){ loadProgress(); try{ updateMenuUI(); }catch(e){} try{ updateOpenSizeUI(); }catch(e){} startCloudAutosaveLoop(false); };
+
+// ============================================================
+// SETTINGS SCREEN — stake/display controls
+// ============================================================
+function renderSettingsStakeDisplay() {
+    const el = document.getElementById('settings-stake-display');
+    if (!el) return;
+    const stakeIds = typeof STAKE_PRESETS !== 'undefined' ? Object.keys(STAKE_PRESETS) : ['1/2','1/3','2/5','5/10'];
+    const curStake = (typeof sessionBuilder !== 'undefined') ? sessionBuilder.stakeId : '1/3';
+    const curMode  = (typeof sessionBuilder !== 'undefined') ? sessionBuilder.displayMode : 'dollars';
+    const stakeHtml = stakeIds.map(id => {
+        const sel = curStake === id;
+        return `<button onclick="setStakePreset('${id}')" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all config-btn ${sel ? 'selected' : ''}">${id}</button>`;
+    }).join('');
+    const dollarsSel = curMode === 'dollars';
+    const bbSel = curMode === 'bb';
+    el.innerHTML = `
+        <div class="flex flex-col gap-3">
+            <div>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-2">Stakes</p>
+                <div class="flex gap-2">${stakeHtml}</div>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mb-2">Display</p>
+                <div class="flex gap-2">
+                    <button onclick="setDisplayMode('dollars');renderSettingsStakeDisplay();" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all config-btn ${dollarsSel ? 'selected' : ''}">$</button>
+                    <button onclick="setDisplayMode('bb');renderSettingsStakeDisplay();" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all config-btn ${bbSel ? 'selected' : ''}">BB</button>
+                </div>
+            </div>
+        </div>`;
+}
+
+// Patch showSettings to also populate stake/display controls
+(function() {
+    const _orig = window.showSettings;
+    window.showSettings = function() {
+        if (_orig) _orig.apply(this, arguments);
+        try { renderSettingsStakeDisplay(); } catch(_) {}
+    };
+})();
 function showUserStats() {
     hideAllScreens();
     const screen = document.getElementById('stats-screen');
