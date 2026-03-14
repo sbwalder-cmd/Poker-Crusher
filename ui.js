@@ -324,10 +324,12 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
             await delay(400);
         } else if (scenario === 'VS_LIMP') {
             // Multi-limp animation: fold to first limper, each limper limps, fold between, hero acts
-            const actionOrder = ['UTG','UTG1','UTG2','LJ','HJ','CO','BTN','SB'];
+            // BB must be in the action order so the hero-position stop works for all seats
+            const actionOrder = ['UTG','UTG1','UTG2','LJ','HJ','CO','BTN','SB','BB'];
             const allLimpers = state.limperPositions || [oppPos];
             const limperSet = new Set(allLimpers);
             const firstLimperIdx = actionOrder.indexOf(allLimpers[0]);
+            const heroIdx_ao = actionOrder.indexOf(heroPos);
             
             // Fold before first limper
             for (let k = 0; k < firstLimperIdx; k++) {
@@ -366,9 +368,10 @@ function runTableAnimation(heroPos, oppPos, scenario, onDone) {
                 await delay(300);
             }
             
-            // Fold between last limper and hero
+            // Fold between last limper and hero — stop AT hero, don't fold past
             const lastLimperIdx = actionOrder.indexOf(allLimpers[allLimpers.length - 1]);
-            for (let k = lastLimperIdx + 1; k < actionOrder.length; k++) {
+            const foldEnd = heroIdx_ao >= 0 ? heroIdx_ao : actionOrder.length;
+            for (let k = lastLimperIdx + 1; k < foldEnd; k++) {
                 const foldPos = actionOrder[k];
                 if (foldPos === heroPos || limperSet.has(foldPos)) continue;
                 const foldEl = document.getElementById(`seat-${foldPos}`);
@@ -529,8 +532,10 @@ function renderHand(handKeyOrHeroHand) {
 
     let cards = null;
     if (handKeyOrHeroHand && typeof handKeyOrHeroHand === 'object' && Array.isArray(handKeyOrHeroHand.cards) && handKeyOrHeroHand.cards.length >= 2) {
+        // Postflop: use actual dealt suits from the hero hand object
         cards = handKeyOrHeroHand.cards.slice(0, 2).map(c => ({ rank: c.rank, suit: SUIT_MAP[c.suit] || c.suit }));
     } else {
+        // Preflop: generate random suits from abstract hand key like 'AKs'
         const handKey = String(handKeyOrHeroHand || '');
         const r1 = handKey[0], r2 = handKey[1], type = handKey[2] || '';
         const suits = ['♠','♥','♣','♦'];
@@ -755,6 +760,11 @@ function getScenarioPot$(scenario) {
         // Same pot structure as turn cbet — hero is OOP calling the same bet
         if (state.postflop) return Math.round(getSRPPot$(state.postflop.preflopFamily) * 1.66);
         return Math.round(open$ * 2 * 1.66);
+    }
+    if (scenario === 'POSTFLOP_TURN_DELAYED_CBET') {
+        // Flop checked through — pot is still the SRP flop pot (no c-bet entered)
+        if (state.postflop) return getSRPPot$(state.postflop.preflopFamily);
+        return open$ * 2 + 1;
     }
     return blinds$;
 }
@@ -1562,7 +1572,7 @@ function formatSpotLabel(rawSpotId) {
     if (rawSpotId === '1L' || rawSpotId === '2L' || rawSpotId === '3P') return '';
     return POS_LABELS[clean] || clean;
 }
-const SCENARIO_SHORT = { RFI: 'RFI', FACING_RFI: 'vs RFI', RFI_VS_3BET: 'vs 3Bet', VS_LIMP: 'vs Limps', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push/Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet', POSTFLOP_TURN_CBET: 'Turn Barrel', POSTFLOP_TURN_DEFEND: 'Turn Defense' };
+const SCENARIO_SHORT = { RFI: 'RFI', FACING_RFI: 'vs RFI', RFI_VS_3BET: 'vs 3Bet', VS_LIMP: 'vs Limps', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push/Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet', POSTFLOP_TURN_CBET: 'Turn Barrel', POSTFLOP_TURN_DEFEND: 'Turn Defense', POSTFLOP_TURN_DELAYED_CBET: 'Turn Delayed' };
 const ACTION_LABELS = { FOLD: 'Fold', RAISE: 'Raise', CALL: 'Call', '3BET': '3-Bet', '4BET': '4-Bet', ISO: 'Iso Raise', OVERLIMP: 'Overlimp', SQUEEZE: 'Squeeze', SHOVE: 'Shove All-In', CHECK: 'Check', CBET: 'C-Bet' };
 
 function showSessionLog() {
@@ -1612,7 +1622,8 @@ function logRowChart(idx) {
     // Postflop log entries: show the postflop feedback modal (read-only) instead
     // of the preflop range chart, which has no handler for postflop spots.
     if (e.scenario === 'POSTFLOP_CBET' || e.scenario === 'POSTFLOP_DEFEND' ||
-        e.scenario === 'POSTFLOP_TURN_CBET' || e.scenario === 'POSTFLOP_TURN_DEFEND') {
+        e.scenario === 'POSTFLOP_TURN_CBET' || e.scenario === 'POSTFLOP_TURN_DEFEND' ||
+        e.scenario === 'POSTFLOP_TURN_DELAYED_CBET') {
         hideSessionLog();
         const logSpot = {
             heroPos: e.pos,
@@ -1647,6 +1658,11 @@ function logRowChart(idx) {
             logSpot.turnFamily = e.turnFamily || null;
             logSpot.flopArchetype = e.archetype || '';
             showTurnDefenderFeedback(logSpot, logResult);
+        } else if (e.scenario === 'POSTFLOP_TURN_DELAYED_CBET' && typeof showDelayedTurnFeedback === 'function') {
+            logSpot.turnCard = e.turnCard || null;
+            logSpot.turnFamily = e.turnFamily || null;
+            logSpot.flopArchetype = e.archetype || '';
+            showDelayedTurnFeedback(logSpot, logResult);
         } else {
             showPostflopFeedback(logSpot, logResult, e.correct);
         }
@@ -1670,7 +1686,7 @@ function showDrilldown(title, contentFn) {
 function hideDrilldown() { document.getElementById('drilldown-panel').classList.add('hidden'); }
 
 function drilldownScenario(sc) {
-    const SCENARIO_LABELS = { RFI: 'RFI (Unopened)', FACING_RFI: 'Defending vs RFI', RFI_VS_3BET: 'vs 3-Bet', VS_LIMP: 'Vs Limpers (1–3+)', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push / Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet', POSTFLOP_TURN_CBET: 'Turn Barrel', POSTFLOP_TURN_DEFEND: 'Turn Defense' };
+    const SCENARIO_LABELS = { RFI: 'RFI (Unopened)', FACING_RFI: 'Defending vs RFI', RFI_VS_3BET: 'vs 3-Bet', VS_LIMP: 'Vs Limpers (1–3+)', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push / Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet', POSTFLOP_TURN_CBET: 'Turn Barrel', POSTFLOP_TURN_DEFEND: 'Turn Defense', POSTFLOP_TURN_DELAYED_CBET: 'Turn Delayed C-Bet' };
 
     // Daily Run meta (UI only)
     const drm = loadDailyRunMeta();
