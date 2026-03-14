@@ -569,10 +569,12 @@ function flipHeroCards() {
 
 
 // ==============================
+// Live $1/$3 visual bet sizing (display-only)
+// ==============================
+// ==============================
 // Stake-aware sizing + display helpers
 // ==============================
 
-// Current stake preset accessors (safe — default to 1/3 if STAKE_PRESETS not loaded yet)
 function getCurrentStakePreset() {
     if (typeof STAKE_PRESETS !== 'undefined' && typeof sessionBuilder !== 'undefined' && sessionBuilder.stakeId) {
         return STAKE_PRESETS[sessionBuilder.stakeId] || STAKE_PRESETS['1/3'];
@@ -583,14 +585,11 @@ function getSmallBlind$()  { return getCurrentStakePreset().sb; }
 function getBigBlind$()    { return getCurrentStakePreset().bb; }
 function getBlindTotal$()  { return getSmallBlind$() + getBigBlind$(); }
 
-// BB_DOLLARS kept as a dynamic getter alias so all existing callers (bbTo$, getOpenSizeBB, etc.) work unchanged
+// BB_DOLLARS: dynamic getter so all existing internal callers continue to work
 function _currentBBDollars() { return getBigBlind$(); }
-// Shim: code that reads BB_DOLLARS directly via the old constant gets the live value via a getter.
-// We shadow the old const with a property on window so existing reads are intercepted.
 Object.defineProperty(window, 'BB_DOLLARS', { get: _currentBBDollars, configurable: true });
 
 function roundLiveDollars(n) {
-    // Under $30: nearest $1. $30+: nearest $5 (live realism).
     if (!isFinite(n)) return n;
     if (n < 30) return Math.round(n);
     return Math.round(n / 5) * 5;
@@ -608,15 +607,11 @@ function formatAmt(dollars) {
     if (mode === 'bb') {
         const bb = getBigBlind$();
         if (!bb) return fmt$(dollars);
-        const bbs = dollars / bb;
-        // Show clean decimals: whole numbers, or .5
-        const rounded = Math.round(bbs * 2) / 2;
+        const rounded = Math.round((dollars / bb) * 2) / 2;
         return `${rounded}bb`;
     }
     return fmt$(dollars);
 }
-
-// formatAmt for pot badge (same logic, exposed as alias for clarity)
 function formatPot(dollars) { return formatAmt(dollars); }
 
 // --- Hero bet slide animation (visual-only) ---
@@ -730,8 +725,8 @@ const ORDER = ['SB','BB','UTG','UTG1','UTG2','LJ','HJ','CO','BTN'];
 return ORDER.indexOf(heroPos) > ORDER.indexOf(oppPos);
 }
 
-function getOpenSize$() { return (state && state.config && state.config.openSize) ? state.config.openSize : getCurrentStakePreset().defaultOpen; } // reads from config
-function getOpenSizeBB() { return getOpenSize$() / getBigBlind$(); } // = 5bb
+function getOpenSize$() { return (state && state.config && state.config.openSize) ? state.config.openSize : getCurrentStakePreset().defaultOpen; }
+function getOpenSizeBB() { return getOpenSize$() / getBigBlind$(); }
 
 // ---------------------------------------------------------------------------
 // Central pot display helpers
@@ -758,7 +753,7 @@ function getScenarioPot$(scenario) {
         return open$ + threeBet$ + getSmallBlind$(); // dead SB
     }
     if (scenario === 'VS_LIMP') {
-        // Each limper called 1BB + SB + BB
+        // Each limper called 1BB ($3) + SB ($1) + BB ($3)
         const limpers = (state.limperPositions && state.limperPositions.length) || 1;
         return limpers * getBigBlind$() + blinds$;
     }
@@ -775,27 +770,22 @@ function getScenarioPot$(scenario) {
         return blinds$;
     }
     if (scenario === 'POSTFLOP_CBET') {
-        // SRP pot: hero open + villain call + dead money by family
         if (state.postflop) return getSRPPot$(state.postflop.preflopFamily);
-        return open$ * 2 + getSmallBlind$(); // fallback: approx BTN_vs_BB dead SB
+        return open$ * 2 + getSmallBlind$();
     }
     if (scenario === 'POSTFLOP_DEFEND') {
-        // Same SRP pot — defender faces c-bet in same pot structure
         if (state.postflop) return getSRPPot$(state.postflop.preflopFamily);
         return open$ * 2 + getSmallBlind$();
     }
     if (scenario === 'POSTFLOP_TURN_CBET') {
-        // Turn pot: SRP flop pot + c-bet (33%) was called — pot grew by 1.66×
         if (state.postflop) return Math.round(getSRPPot$(state.postflop.preflopFamily) * 1.66);
         return Math.round((open$ * 2 + getSmallBlind$()) * 1.66);
     }
     if (scenario === 'POSTFLOP_TURN_DEFEND') {
-        // Same pot structure as turn cbet — hero is OOP calling the same bet
         if (state.postflop) return Math.round(getSRPPot$(state.postflop.preflopFamily) * 1.66);
         return Math.round((open$ * 2 + getSmallBlind$()) * 1.66);
     }
     if (scenario === 'POSTFLOP_TURN_DELAYED_CBET') {
-        // Flop checked through — pot is still the SRP flop pot (no c-bet entered)
         if (state.postflop) return getSRPPot$(state.postflop.preflopFamily);
         return open$ * 2 + getSmallBlind$();
     }
@@ -894,7 +884,6 @@ function renderVillainBet(betsLayer, heroPos, villainPos, betAmount$) {
 }
 
 // Villain open size: randomized per-hand from a realistic pool for the current stake.
-// Pool is defined in STAKE_PRESETS per game type.
 function pickVillainOpenSize() {
     const pool = getCurrentStakePreset().villainOpenPool;
     return pool[Math.floor(Math.random() * pool.length)];
@@ -904,7 +893,6 @@ return (state && state.villainOpenSize) ? state.villainOpenSize : getCurrentStak
 }
 
 function getIsoSize$(numLimpers) {
-// Iso = 5bb + 1bb per limper
 const bb = 5 + (numLimpers || 0);
 return bb * getBigBlind$();
 }
@@ -993,7 +981,7 @@ container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
 </div>`;
 } else if (state.scenario === 'SQUEEZE' || state.scenario === 'SQUEEZE_2C') {
 const callers = (state.scenario === 'SQUEEZE_2C') ? 2 : 1;
-const opener = state.squeezeOpener || state.oppPos; // opener seat if tracked
+const opener = state.squeezeOpener || state.oppPos;
 const villainOpen$ = getVillainOpenSize$();
 const squeeze$ = getSqueezeSize$(state.currentPos, opener, callers, villainOpen$);
 const isIP = postflopIP(state.currentPos, opener);
@@ -1008,8 +996,7 @@ container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
 </div>`;
 
 } else if (state.scenario === 'RFI_VS_3BET' || state.scenario === 'RFI_VS_3') {
-// Defending vs a 3-bet after we opened: Fold / Call / 4-bet (display-only sizing)
-const threeBet$ = get3betSize$(state.oppPos, state.currentPos); // villain 3-bet size vs our open
+const threeBet$ = get3betSize$(state.oppPos, state.currentPos);
 const heroIP = postflopIP(state.currentPos, state.oppPos);
 const fourBet$ = get4betSize$(state.currentPos, state.oppPos);
 const hint = heroIP ? `IP 4-bet: 2.2× 3-bet (${formatAmt(threeBet$)})` : `OOP 4-bet: 2.5× 3-bet (${formatAmt(threeBet$)})`;
@@ -1327,6 +1314,10 @@ function hideConfigMenu() { document.getElementById('config-screen').classList.a
 let _chartIsReview = false;
 function closeChart() {
     document.getElementById('chart-modal').classList.add('hidden');
+    // Cancel the wrong-answer failsafe timer — user manually closed the chart,
+    // so we drive advancement from here instead. Without this, the 3500ms failsafe
+    // fires after closeChart() already started a new round, causing a double-advance.
+    try { __clearNextTimer(); } catch(_) {}
     // Release round guard (user is returning to trainer)
     __endResolve();
     if (document.getElementById('trainer-screen').classList.contains('hidden')) return;
@@ -1958,7 +1949,7 @@ function launchSpotDrill(spotKey) {
     drillState.handCount = SPOT_DRILL_COUNT;
     drillState.scenario = resolvedSc;
     drillState.positions = heroPos ? [heroPos] : [...ALL_POSITIONS];
-    drillState.lockedLimperBucket = (resolvedSc === 'VS_LIMP' && limiterBucket) ? limiterBucket : null;
+    drillState.lockedLimperBucket = (resolvedSc === 'VS_LIMP' && limperBucket) ? limperBucket : null;
     drillState._savedConfig = savedConfig;
 
     // Restore sessionBuilder on exit — patch into _savedConfig bundle
@@ -2173,8 +2164,6 @@ function drilldownSpot(spotKey) {
     };
 })();
 
-window.onload = function(){ loadProgress(); try{ updateMenuUI(); }catch(e){} try{ updateOpenSizeUI(); }catch(e){} startCloudAutosaveLoop(false); };
-
 // ============================================================
 // SETTINGS SCREEN — stake/display controls
 // ============================================================
@@ -2186,7 +2175,7 @@ function renderSettingsStakeDisplay() {
     const curMode  = (typeof sessionBuilder !== 'undefined') ? sessionBuilder.displayMode : 'dollars';
     const stakeHtml = stakeIds.map(id => {
         const sel = curStake === id;
-        return `<button onclick="setStakePreset('${id}')" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all config-btn ${sel ? 'selected' : ''}">${id}</button>`;
+        return `<button onclick="setStakePreset('${id}');renderSettingsStakeDisplay();" class="flex-1 py-2.5 rounded-xl text-xs font-black transition-all config-btn ${sel ? 'selected' : ''}">${id}</button>`;
     }).join('');
     const dollarsSel = curMode === 'dollars';
     const bbSel = curMode === 'bb';
@@ -2206,7 +2195,7 @@ function renderSettingsStakeDisplay() {
         </div>`;
 }
 
-// Patch showSettings to also populate stake/display controls
+// Patch showSettings to also render stake/display controls
 (function() {
     const _orig = window.showSettings;
     window.showSettings = function() {
@@ -2214,6 +2203,8 @@ function renderSettingsStakeDisplay() {
         try { renderSettingsStakeDisplay(); } catch(_) {}
     };
 })();
+
+window.onload = function(){ loadProgress(); try{ updateMenuUI(); }catch(e){} try{ updateOpenSizeUI(); }catch(e){} startCloudAutosaveLoop(false); };
 function showUserStats() {
     hideAllScreens();
     const screen = document.getElementById('stats-screen');
