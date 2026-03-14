@@ -2475,19 +2475,11 @@ function generateNextRound() {
         const spot = state.postflop;
         document.getElementById('scenario-hint').innerText = `${POS_LABELS[spot.villainPos]} opened, you called from BB. ${POS_LABELS[spot.villainPos]} bets 33%...`;
     } else if (state.scenario === 'POSTFLOP_TURN_CBET' && state.postflop) {
-        const spot = state.postflop;
-        const posLabel = spot.positionState === 'IP' ? 'IP' : 'OOP';
-        const tfLabel = (typeof TURN_FAMILY_LABELS !== 'undefined' && TURN_FAMILY_LABELS[spot.turnFamily]) || spot.turnFamily || '';
-        document.getElementById('scenario-hint').innerText = `You opened ${POS_LABELS[spot.heroPos]}, ${POS_LABELS[spot.villainPos]} called. Flop c-bet called. Turn: ${tfLabel}. You are ${posLabel}.`;
+        document.getElementById('scenario-hint').innerText = '';
     } else if (state.scenario === 'POSTFLOP_TURN_DEFEND' && state.postflop) {
-        const spot = state.postflop;
-        const tfLabel = (typeof TURN_FAMILY_LABELS !== 'undefined' && TURN_FAMILY_LABELS[spot.turnFamily]) || spot.turnFamily || '';
-        document.getElementById('scenario-hint').innerText = `${POS_LABELS[spot.villainPos]} opened, you called from BB. Called flop c-bet. Turn: ${tfLabel}. Villain bets 50%...`;
+        document.getElementById('scenario-hint').innerText = '';
     } else if (state.scenario === 'POSTFLOP_TURN_DELAYED_CBET' && state.postflop) {
-        const spot = state.postflop;
-        const posLabel = spot.positionState === 'IP' ? 'IP' : 'OOP';
-        const tfLabel = (typeof TURN_FAMILY_LABELS !== 'undefined' && TURN_FAMILY_LABELS[spot.turnFamily]) || spot.turnFamily || '';
-        document.getElementById('scenario-hint').innerText = `You opened ${POS_LABELS[spot.heroPos]}, ${POS_LABELS[spot.villainPos]} called. Flop checked through. Turn: ${tfLabel}. You are ${posLabel}.`;
+        document.getElementById('scenario-hint').innerText = '';
     } else {
         document.getElementById('scenario-hint').innerText = `You raised, ${POS_LABELS[state.oppPos]} 3-bets to ${fmt$(get3betSize$(state.oppPos, state.currentPos))}...`;
     }
@@ -2581,12 +2573,7 @@ function generateNextRound() {
         state.currentHand = spot.heroHand || null;
         if (state.currentHand) renderHeroCardBacks();
         const flopInfoEl = document.getElementById('flop-info-line');
-        if (flopInfoEl) {
-            const archLabel = ARCHETYPE_LABELS[spot.flopArchetype] || spot.flopArchetype || '';
-            const tfLabel = (typeof TURN_FAMILY_LABELS !== 'undefined' && TURN_FAMILY_LABELS[spot.turnFamily]) || spot.turnFamily || '';
-            flopInfoEl.innerHTML = `<span class="text-slate-400">Board:</span> ${_flopCardsHtml(spot.flopCards)} <span style="color:#64748b;font-weight:900;font-size:11px;">·</span> ${_turnCardInlineHtml(spot.turnCard)} <span class="text-slate-500 text-[10px] font-bold uppercase tracking-wider ml-1">(${archLabel} · ${tfLabel})</span>`;
-            flopInfoEl.classList.remove('hidden');
-        }
+        if (flopInfoEl) flopInfoEl.classList.add('hidden');
         renderCommunityCards([...spot.flopCards, spot.turnCard]);
         const cl1 = document.getElementById('cards-layer'); if (cl1) cl1.innerHTML = '';
         const bl1 = document.getElementById('bets-layer'); if (bl1) bl1.innerHTML = '';
@@ -2611,12 +2598,7 @@ function generateNextRound() {
         state.currentHand = spot.heroHand || null;
         if (state.currentHand) renderHeroCardBacks();
         const flopInfoEl2 = document.getElementById('flop-info-line');
-        if (flopInfoEl2) {
-            const archLabel = ARCHETYPE_LABELS[spot.flopArchetype] || spot.flopArchetype || '';
-            const tfLabel = (typeof TURN_FAMILY_LABELS !== 'undefined' && TURN_FAMILY_LABELS[spot.turnFamily]) || spot.turnFamily || '';
-            flopInfoEl2.innerHTML = `<span class="text-slate-400">Board:</span> ${_flopCardsHtml(spot.flopCards)} <span style="color:#64748b;font-weight:900;font-size:11px;">·</span> ${_turnCardInlineHtml(spot.turnCard)} <span class="text-slate-500 text-[10px] font-bold uppercase tracking-wider ml-1">(${archLabel} · ${tfLabel})</span>`;
-            flopInfoEl2.classList.remove('hidden');
-        }
+        if (flopInfoEl2) flopInfoEl2.classList.add('hidden');
         renderCommunityCards([...spot.flopCards, spot.turnCard]);
         const cl2 = document.getElementById('cards-layer'); if (cl2) cl2.innerHTML = '';
         const bl2 = document.getElementById('bets-layer'); if (bl2) bl2.innerHTML = '';
@@ -2642,12 +2624,7 @@ function generateNextRound() {
         state.currentHand = spot.heroHand || null;
         if (state.currentHand) renderHeroCardBacks();
         const flopInfoEl = document.getElementById('flop-info-line');
-        if (flopInfoEl) {
-            const archLabel = ARCHETYPE_LABELS[spot.flopArchetype] || spot.flopArchetype || '';
-            const tfLabel = (typeof TURN_FAMILY_LABELS !== 'undefined' && TURN_FAMILY_LABELS[spot.turnFamily]) || spot.turnFamily || '';
-            flopInfoEl.innerHTML = `<span class="text-slate-400">Board:</span> ${_flopCardsHtml(spot.flopCards)} <span style="color:#64748b;font-weight:900;font-size:11px;">·</span> ${_turnCardInlineHtml(spot.turnCard)} <span class="text-slate-500 text-[10px] font-bold uppercase tracking-wider ml-1">(${archLabel} · ${tfLabel})</span>`;
-            flopInfoEl.classList.remove('hidden');
-        }
+        if (flopInfoEl) flopInfoEl.classList.add('hidden');
         renderCommunityCards([...spot.flopCards, spot.turnCard]);
         const cl3 = document.getElementById('cards-layer'); if (cl3) cl3.innerHTML = '';
         const bl3 = document.getElementById('bets-layer'); if (bl3) bl3.innerHTML = '';
