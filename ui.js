@@ -800,6 +800,65 @@ function renderPotBadge(betsLayer, total$) {
     betsLayer.appendChild(badge);
 }
 
+// ---------------------------------------------------------------------------
+// Postflop action indicators — check mark or bet chip near villain seat
+// ---------------------------------------------------------------------------
+
+// Show a "✓ Check" badge next to the villain's seat
+function renderVillainCheck(betsLayer, heroPos, villainPos) {
+    const coords = getSeatCoords(heroPos, villainPos);
+    const origL = parseFloat(coords.left), origT = parseFloat(coords.top);
+    const isMob = (SEAT_COORDS === SEAT_COORDS_MOBILE);
+
+    // Nudge toward center
+    let cL = origL, cT = origT;
+    const off = isMob ? 10 : 14;
+    if (cL < 45) cL += off; else if (cL > 55) cL -= off;
+    if (cT < 45) cT += off; else if (cT > 55) cT -= off;
+    // Extra clearance for edge seats
+    if (origT > (isMob ? 75 : 80)) cT -= (isMob ? 8 : 10);
+    if (origT < (isMob ? 15 : 12)) cT += (isMob ? 6 : 8);
+    cL = Math.max(8, Math.min(92, cL));
+    cT = Math.max(10, Math.min(88, cT));
+
+    const el = document.createElement('div');
+    el.className = 'absolute z-35 pointer-events-none flex items-center gap-1';
+    el.style.cssText = `left:${cL}%;top:${cT}%;transform:translate(-50%,-50%);animation:ccDeal 0.25s ease-out both;`;
+    el.innerHTML =
+        `<div style="width:var(--chip-size,16px);height:var(--chip-size,16px);" ` +
+        `class="rounded-full bg-slate-700 border-2 border-slate-500 flex items-center justify-center">` +
+        `<span style="font-size:var(--chip-font,9px);" class="font-black text-emerald-400 leading-none">✓</span></div>` +
+        `<span style="font-size:var(--chip-font,9px);" class="font-black text-slate-400 bg-black/40 px-1 rounded">Check</span>`;
+    betsLayer.appendChild(el);
+}
+
+// Show a bet chip + amount next to the villain's seat (separate from pot)
+function renderVillainBet(betsLayer, heroPos, villainPos, betAmount$) {
+    const coords = getSeatCoords(heroPos, villainPos);
+    const origL = parseFloat(coords.left), origT = parseFloat(coords.top);
+    const isMob = (SEAT_COORDS === SEAT_COORDS_MOBILE);
+
+    // Nudge toward center
+    let cL = origL, cT = origT;
+    const off = isMob ? 10 : 14;
+    if (cL < 45) cL += off; else if (cL > 55) cL -= off;
+    if (cT < 45) cT += off; else if (cT > 55) cT -= off;
+    // Extra clearance for edge seats
+    if (origT > (isMob ? 75 : 80)) cT -= (isMob ? 8 : 10);
+    if (origT < (isMob ? 15 : 12)) cT += (isMob ? 6 : 8);
+    cL = Math.max(8, Math.min(92, cL));
+    cT = Math.max(10, Math.min(88, cT));
+
+    const el = document.createElement('div');
+    el.className = 'absolute z-35 pointer-events-none flex items-center gap-1';
+    el.style.cssText = `left:${cL}%;top:${cT}%;transform:translate(-50%,-50%);animation:ccDeal 0.25s ease-out both;`;
+    el.innerHTML =
+        `<div style="width:var(--chip-size,16px);height:var(--chip-size,16px);" ` +
+        `class="rounded-full bg-rose-600 border-2 border-white/20 shadow-md"></div>` +
+        `<span style="font-size:var(--chip-font,9px);" class="font-black text-yellow-400 bg-black/40 px-1 rounded">$${betAmount$}</span>`;
+    betsLayer.appendChild(el);
+}
+
 // Villain open size: randomized per-hand from a realistic 1/3 pool.
 // Pool weighted toward $15 (most common), but includes the full range you'll face.
 // 1/3 live open distribution: $6 min-raise (rare), $10-12 tight, $15 standard (most common), $17-18 occasional, $20 splashy (uncommon), $25 very rare
