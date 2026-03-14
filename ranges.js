@@ -3680,9 +3680,62 @@ function _enrichTurnDefendStrategy(baseStrategy, heroHandClass, turnTexture, nod
 
 // --- Turn spot generators ---
 
+// =============================================================================
+// SHARED FLOP-STATE BUILDER — used by all three turn generators
+// =============================================================================
+//
+// _buildBaseFlopState: builds a coherent flop state (family + hero hand + board)
+// that turn generators inherit from, rather than each rebuilding independently.
+//
+// dealHero: function(fi) → heroHand  (differs between PFR and defender roles)
+// Returns a validated flop state object, or null if any safety check fails.
+//
+// _extendFlopStateToTurn: takes a valid flop state and adds the turn card,
+// turn classification, and turn texture.  Returns null if the turn card is invalid.
+// =============================================================================
+
+function _buildBaseFlopState(fam, dealHero) {
+    const fi = POSTFLOP_PREFLOP_FAMILIES[fam];
+    if (!fi) return null;
+
+    const heroHand = dealHero(fi);
+    if (!heroHand || !heroHand.cards || heroHand.cards.length < 2) return null;
+
+    const flopArch = pickFlopArchetype();
+    const flopCards = _generateFlopNoConflict(flopArch, heroHand);
+    if (!flopCards || flopCards.length !== 3) return null;
+
+    return {
+        preflopFamily:   fam,
+        positionState:   fi.positionState,
+        heroPos:         fi.heroPos,
+        villainPos:      fi.villainPos,
+        heroHand:        heroHand,
+        heroCards:       heroHand.cards, // concrete [{rank,suit},{rank,suit}]
+        flopArch:        flopArch,
+        flopCards:       flopCards,
+        flopHandClass:   classifyFlopHand(heroHand, flopCards),
+        flopClassification: classifyFlop(flopCards)
+    };
+}
+
+function _extendFlopStateToTurn(fs) {
+    const turnCard = _dealTurnCard(fs.flopCards, fs.heroHand);
+    if (!turnCard || !turnCard.rank || !turnCard.suit) return null;
+
+    return {
+        turnCard:     turnCard,
+        turnBoard:    [...fs.flopCards, turnCard], // 4-card board derived from inherited flop
+        turnFamily:   classifyTurnCard(turnCard, fs.flopCards),
+        turnHandCls:  classifyTurnHand(fs.heroHand, fs.flopCards, turnCard),
+        turnTexture:  classifyTurnTexture(fs.flopCards, turnCard)
+    };
+}
+
 /**
- * generateTurnCBetSpot — generate a PFR turn barrel decision spot.
- * Simulates: SRP flop, PFR c-bets, gets called, now faces turn.
+ * generateTurnCBetSpot — PFR turn barrel decision.
+ * Line: SRP → flop c-bet called → turn decision.
+ * Inherits family/hero/flop from _buildBaseFlopState; extends with turn via _extendFlopStateToTurn.
  */
 function generateTurnCBetSpot(maxRetries, familyFilter) {
     maxRetries = maxRetries || 25;
@@ -3694,77 +3747,71 @@ function generateTurnCBetSpot(maxRetries, familyFilter) {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         const fam = fams[Math.floor(Math.random() * fams.length)];
-        const fi  = POSTFLOP_PREFLOP_FAMILIES[fam];
-        if (!fi) continue;
 
-        const flopArch    = pickFlopArchetype();
-        const heroHand    = _dealPostflopHeroHand(fi.heroPos);
-        // Safety: require concrete hero cards before proceeding
-        if (!heroHand || !heroHand.cards || heroHand.cards.length < 2) continue;
-        const fc          = _generateFlopNoConflict(flopArch, heroHand);
-        // Safety: require valid 3-card flop
-        if (!fc || fc.length !== 3) continue;
-        const turnCard    = _dealTurnCard(fc, heroHand);
-        // Safety: require valid turn card
-        if (!turnCard || !turnCard.rank || !turnCard.suit) continue;
-        const turnFamily  = classifyTurnCard(turnCard, fc);
-        const turnHandCls = classifyTurnHand(heroHand, fc, turnCard);
-        const turnTexture = classifyTurnTexture(fc, turnCard);
+        // Step 1: build coherent flop state (family + hero hand + board)
+        const fs = _buildBaseFlopState(fam, fi => _dealPostflopHeroHand(fi.heroPos));
+        if (!fs) continue;
+
+        // Step 2: extend flop state to turn (turn card derived from inherited board)
+        const ts = _extendFlopStateToTurn(fs);
+        if (!ts) continue;
 
         const spot = {
-            potType: 'SRP', preflopFamily: fam, street: 'TURN', heroRole: 'PFR',
-            positionState: fi.positionState, nodeType: 'TURN_CBET_DECISION',
-            flopArchetype: flopArch, boardArchetype: flopArch,
-            turnFamily: turnFamily, heroHandClass: turnHandCls,
-            flopHandClass: classifyFlopHand(heroHand, fc),
-            heroPos: fi.heroPos, villainPos: fi.villainPos,
-            flopCards: fc, flopClassification: classifyFlop(fc),
-            turnCard: turnCard, heroHand: heroHand,
-            heroCards: heroHand.cards, // convenience alias: concrete [{rank,suit},{rank,suit}]
-            turnTexture: turnTexture,
+            potType: 'SRP', preflopFamily: fs.preflopFamily, street: 'TURN', heroRole: 'PFR',
+            positionState: fs.positionState, nodeType: 'TURN_CBET_DECISION',
+            flopArchetype: fs.flopArch, boardArchetype: fs.flopArch,
+            turnFamily: ts.turnFamily, heroHandClass: ts.turnHandCls,
+            flopHandClass: fs.flopHandClass,
+            heroPos: fs.heroPos, villainPos: fs.villainPos,
+            flopCards: fs.flopCards, flopClassification: fs.flopClassification,
+            turnCard: ts.turnCard, turnBoard: ts.turnBoard,
+            heroHand: fs.heroHand, heroCards: fs.heroCards,
+            turnTexture: ts.turnTexture,
+            // Action line inherited from flop state: flop c-bet was called
             actionHistory: ['FLOP_CBET', 'FLOP_CALLED'],
-            potSize: null,
-            effectiveStack: 200
+            potSize: null, effectiveStack: 200
         };
-        spot.potSize = null; // ui.js computes display pot from getSRPPot$; stored for metadata
         spot.spotKey = makeTurnCBetSpotKeyV1(spot);
         const baseStrat = POSTFLOP_TURN_STRATEGY[spot.spotKey] || null;
-        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, turnHandCls, turnTexture, 'TURN_CBET_DECISION') || baseStrat;
+        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, ts.turnHandCls, ts.turnTexture, 'TURN_CBET_DECISION') || baseStrat;
 
         if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
     }
 
-    // Last-resort fallback
+    // Last-resort fallback — still uses the same two-step pattern
     console.warn('[TurnCBet] Retries exhausted; forcing BTN_vs_BB fallback.');
-    const fi   = POSTFLOP_PREFLOP_FAMILIES['BTN_vs_BB'];
-    const heroHand = _dealPostflopHeroHand('BTN');
-    const fc   = _generateFlopNoConflict('A_HIGH_DRY', heroHand);
-    const turnCard   = _dealTurnCard(fc, heroHand);
-    const turnFamily = classifyTurnCard(turnCard, fc);
-    const turnTextureFB = classifyTurnTexture(fc, turnCard);
-    const turnHandClsFB = classifyTurnHand(heroHand, fc, turnCard);
+    const fsFB = _buildBaseFlopState('BTN_vs_BB', () => _dealPostflopHeroHand('BTN')) ||
+        { preflopFamily: 'BTN_vs_BB', positionState: 'IP', heroPos: 'BTN', villainPos: 'BB',
+          heroHand: _concreteHand('AK', true), flopArch: 'A_HIGH_DRY',
+          flopCards: _generateFlopNoConflict('A_HIGH_DRY', _concreteHand('AK', true)),
+          flopHandClass: 'AIR', flopClassification: {} };
+    fsFB.heroCards = fsFB.heroHand.cards;
+    const tsFB = _extendFlopStateToTurn(fsFB) ||
+        { turnCard: { rank: '2', suit: 'c' }, turnBoard: [...(fsFB.flopCards || []), { rank: '2', suit: 'c' }],
+          turnFamily: 'BRICK', turnHandCls: 'AIR', turnTexture: null };
     const spot = {
-        potType: 'SRP', preflopFamily: 'BTN_vs_BB', street: 'TURN', heroRole: 'PFR',
-        positionState: 'IP', nodeType: 'TURN_CBET_DECISION',
-        flopArchetype: 'A_HIGH_DRY', boardArchetype: 'A_HIGH_DRY',
-        turnFamily: turnFamily, heroHandClass: turnHandClsFB,
-        flopHandClass: classifyFlopHand(heroHand, fc),
-        heroPos: 'BTN', villainPos: 'BB',
-        flopCards: fc, flopClassification: classifyFlop(fc),
-        turnCard: turnCard, heroHand: heroHand,
-        heroCards: heroHand.cards, // convenience alias: concrete [{rank,suit},{rank,suit}]
-        turnTexture: turnTextureFB,
+        potType: 'SRP', preflopFamily: fsFB.preflopFamily, street: 'TURN', heroRole: 'PFR',
+        positionState: fsFB.positionState, nodeType: 'TURN_CBET_DECISION',
+        flopArchetype: fsFB.flopArch, boardArchetype: fsFB.flopArch,
+        turnFamily: tsFB.turnFamily, heroHandClass: tsFB.turnHandCls,
+        flopHandClass: fsFB.flopHandClass,
+        heroPos: fsFB.heroPos, villainPos: fsFB.villainPos,
+        flopCards: fsFB.flopCards, flopClassification: fsFB.flopClassification,
+        turnCard: tsFB.turnCard, turnBoard: tsFB.turnBoard,
+        heroHand: fsFB.heroHand, heroCards: fsFB.heroCards,
+        turnTexture: tsFB.turnTexture,
         actionHistory: ['FLOP_CBET', 'FLOP_CALLED'], potSize: null, effectiveStack: 200
     };
     spot.spotKey = makeTurnCBetSpotKeyV1(spot);
     const baseStratFB = POSTFLOP_TURN_STRATEGY[spot.spotKey] || null;
-    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, turnHandClsFB, turnTextureFB, 'TURN_CBET_DECISION') || baseStratFB;
+    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, tsFB.turnHandCls, tsFB.turnTexture, 'TURN_CBET_DECISION') || baseStratFB;
     return spot;
 }
 
 /**
- * generateTurnDefendSpot — generate a defender (BB) turn decision spot.
- * Simulates: SRP flop, PFR c-bets, BB calls, PFR fires turn — BB must decide.
+ * generateTurnDefendSpot — defender (BB) turn decision.
+ * Line: SRP → flop c-bet faced → BB called → PFR fires turn → BB decides.
+ * Inherits family/hero/flop from _buildBaseFlopState; extends with turn via _extendFlopStateToTurn.
  */
 function generateTurnDefendSpot(maxRetries, familyFilter) {
     maxRetries = maxRetries || 25;
@@ -3776,69 +3823,66 @@ function generateTurnDefendSpot(maxRetries, familyFilter) {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         const fam = fams[Math.floor(Math.random() * fams.length)];
-        const fi  = POSTFLOP_PREFLOP_FAMILIES[fam];
-        if (!fi) continue;
 
-        const villainPos  = fi.heroPos; // fi.heroPos is the PFR (villain for defender)
-        const heroHand    = _dealDefenderHeroHand(villainPos);
-        // Safety: require concrete hero cards before proceeding
-        if (!heroHand || !heroHand.cards || heroHand.cards.length < 2) continue;
-        const flopArch    = pickFlopArchetype();
-        const fc          = _generateFlopNoConflict(flopArch, heroHand);
-        // Safety: require valid 3-card flop
-        if (!fc || fc.length !== 3) continue;
-        const turnCard    = _dealTurnCard(fc, heroHand);
-        // Safety: require valid turn card
-        if (!turnCard || !turnCard.rank || !turnCard.suit) continue;
-        const turnFamily  = classifyTurnCard(turnCard, fc);
-        const turnHandCls = classifyTurnHand(heroHand, fc, turnCard);
-        const turnTexture = classifyTurnTexture(fc, turnCard);
+        // Step 1: build coherent flop state (family + hero hand + board)
+        // fi.heroPos is the PFR — the villain for the defender scenario
+        const fs = _buildBaseFlopState(fam, fi => _dealDefenderHeroHand(fi.heroPos));
+        if (!fs) continue;
+
+        // Step 2: extend flop state to turn (turn card derived from inherited board)
+        const ts = _extendFlopStateToTurn(fs);
+        if (!ts) continue;
 
         const spot = {
-            potType: 'SRP', preflopFamily: fam, street: 'TURN', heroRole: 'DEFENDER',
+            potType: 'SRP', preflopFamily: fs.preflopFamily, street: 'TURN', heroRole: 'DEFENDER',
             positionState: 'OOP', nodeType: 'TURN_VS_BET_DECISION',
-            flopArchetype: flopArch, boardArchetype: flopArch,
-            turnFamily: turnFamily, heroHandClass: turnHandCls,
-            flopHandClass: classifyFlopHand(heroHand, fc),
-            heroPos: 'BB', villainPos: villainPos,
-            flopCards: fc, flopClassification: classifyFlop(fc),
-            turnCard: turnCard, heroHand: heroHand,
-            heroCards: heroHand.cards, // convenience alias: concrete [{rank,suit},{rank,suit}]
-            turnTexture: turnTexture,
+            flopArchetype: fs.flopArch, boardArchetype: fs.flopArch,
+            turnFamily: ts.turnFamily, heroHandClass: ts.turnHandCls,
+            flopHandClass: fs.flopHandClass,
+            heroPos: 'BB', villainPos: fs.heroPos, // fi.heroPos is the PFR (villain here)
+            flopCards: fs.flopCards, flopClassification: fs.flopClassification,
+            turnCard: ts.turnCard, turnBoard: ts.turnBoard,
+            heroHand: fs.heroHand, heroCards: fs.heroCards,
+            turnTexture: ts.turnTexture,
+            // Action line inherited from flop state: BB faced c-bet and called
             actionHistory: ['FLOP_CBET_FACED', 'FLOP_CALLED'],
             potSize: null, effectiveStack: 200
         };
         spot.spotKey = makeTurnDefendSpotKeyV1(spot);
         const baseStrat = POSTFLOP_TURN_DEFEND_STRATEGY[spot.spotKey] || null;
-        spot.strategy = _enrichTurnDefendStrategy(baseStrat, turnHandCls, turnTexture, 'TURN_VS_BET_DECISION') || baseStrat;
+        spot.strategy = _enrichTurnDefendStrategy(baseStrat, ts.turnHandCls, ts.turnTexture, 'TURN_VS_BET_DECISION') || baseStrat;
 
         if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
     }
 
-    // Fallback
+    // Last-resort fallback — still uses the same two-step pattern
     console.warn('[TurnDefend] Retries exhausted; forcing BTN_vs_BB fallback.');
-    const heroHand = _dealDefenderHeroHand('BTN') || _concreteHand('AK', true);
-    const fc   = _generateFlopNoConflict('A_HIGH_DRY', heroHand);
-    const turnCard   = _dealTurnCard(fc, heroHand);
-    const turnFamily = classifyTurnCard(turnCard, fc);
-    const turnTextureFB = classifyTurnTexture(fc, turnCard);
-    const turnHandClsFB = classifyTurnHand(heroHand, fc, turnCard);
+    const fbHeroHand = _dealDefenderHeroHand('BTN') || _concreteHand('AK', true);
+    const fsFB = _buildBaseFlopState('BTN_vs_BB', () => fbHeroHand) ||
+        { preflopFamily: 'BTN_vs_BB', positionState: 'OOP', heroPos: 'BTN', villainPos: 'BB',
+          heroHand: fbHeroHand, flopArch: 'A_HIGH_DRY',
+          flopCards: _generateFlopNoConflict('A_HIGH_DRY', fbHeroHand),
+          flopHandClass: 'AIR', flopClassification: {} };
+    fsFB.heroCards = fsFB.heroHand.cards;
+    const tsFB = _extendFlopStateToTurn(fsFB) ||
+        { turnCard: { rank: '2', suit: 'c' }, turnBoard: [...(fsFB.flopCards || []), { rank: '2', suit: 'c' }],
+          turnFamily: 'BRICK', turnHandCls: 'AIR', turnTexture: null };
     const spot = {
-        potType: 'SRP', preflopFamily: 'BTN_vs_BB', street: 'TURN', heroRole: 'DEFENDER',
+        potType: 'SRP', preflopFamily: fsFB.preflopFamily, street: 'TURN', heroRole: 'DEFENDER',
         positionState: 'OOP', nodeType: 'TURN_VS_BET_DECISION',
-        flopArchetype: 'A_HIGH_DRY', boardArchetype: 'A_HIGH_DRY',
-        turnFamily: turnFamily, heroHandClass: turnHandClsFB,
-        flopHandClass: classifyFlopHand(heroHand, fc),
-        heroPos: 'BB', villainPos: 'BTN',
-        flopCards: fc, flopClassification: classifyFlop(fc),
-        turnCard: turnCard, heroHand: heroHand,
-        heroCards: heroHand.cards, // convenience alias: concrete [{rank,suit},{rank,suit}]
-        turnTexture: turnTextureFB,
+        flopArchetype: fsFB.flopArch, boardArchetype: fsFB.flopArch,
+        turnFamily: tsFB.turnFamily, heroHandClass: tsFB.turnHandCls,
+        flopHandClass: fsFB.flopHandClass,
+        heroPos: 'BB', villainPos: fsFB.heroPos,
+        flopCards: fsFB.flopCards, flopClassification: fsFB.flopClassification,
+        turnCard: tsFB.turnCard, turnBoard: tsFB.turnBoard,
+        heroHand: fsFB.heroHand, heroCards: fsFB.heroCards,
+        turnTexture: tsFB.turnTexture,
         actionHistory: ['FLOP_CBET_FACED', 'FLOP_CALLED'], potSize: null, effectiveStack: 200
     };
     spot.spotKey = makeTurnDefendSpotKeyV1(spot);
     const baseStratFB = POSTFLOP_TURN_DEFEND_STRATEGY[spot.spotKey] || null;
-    spot.strategy = _enrichTurnDefendStrategy(baseStratFB, turnHandClsFB, turnTextureFB, 'TURN_VS_BET_DECISION') || baseStratFB;
+    spot.strategy = _enrichTurnDefendStrategy(baseStratFB, tsFB.turnHandCls, tsFB.turnTexture, 'TURN_VS_BET_DECISION') || baseStratFB;
     return spot;
 }
 
@@ -4092,7 +4136,8 @@ const POSTFLOP_TURN_DELAYED_STRATEGY = {};
 
 /**
  * generateDelayedTurnSpot — PFR turn decision after flop checked through.
- * actionHistory: ['FLOP_CHECK', 'FLOP_CHECK_BACK']
+ * Line: SRP → flop checked through → turn decision.
+ * Inherits family/hero/flop from _buildBaseFlopState; extends with turn via _extendFlopStateToTurn.
  */
 function generateDelayedTurnSpot(maxRetries, familyFilter) {
     maxRetries = maxRetries || 25;
@@ -4104,69 +4149,64 @@ function generateDelayedTurnSpot(maxRetries, familyFilter) {
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         const fam = fams[Math.floor(Math.random() * fams.length)];
-        const fi  = POSTFLOP_PREFLOP_FAMILIES[fam];
-        if (!fi) continue;
 
-        const flopArch    = pickFlopArchetype();
-        const heroHand    = _dealPostflopHeroHand(fi.heroPos);
-        // Safety: require concrete hero cards before proceeding
-        if (!heroHand || !heroHand.cards || heroHand.cards.length < 2) continue;
-        const fc          = _generateFlopNoConflict(flopArch, heroHand);
-        // Safety: require valid 3-card flop
-        if (!fc || fc.length !== 3) continue;
-        const turnCard    = _dealTurnCard(fc, heroHand);
-        // Safety: require valid turn card
-        if (!turnCard || !turnCard.rank || !turnCard.suit) continue;
-        const turnFamily  = classifyTurnCard(turnCard, fc);
-        const turnHandCls = classifyTurnHand(heroHand, fc, turnCard);
-        const turnTexture = classifyTurnTexture(fc, turnCard);
+        // Step 1: build coherent flop state (family + hero hand + board)
+        const fs = _buildBaseFlopState(fam, fi => _dealPostflopHeroHand(fi.heroPos));
+        if (!fs) continue;
+
+        // Step 2: extend flop state to turn (turn card derived from inherited board)
+        const ts = _extendFlopStateToTurn(fs);
+        if (!ts) continue;
 
         const spot = {
-            potType: 'SRP', preflopFamily: fam, street: 'TURN', heroRole: 'PFR',
-            positionState: fi.positionState, nodeType: 'TURN_DELAYED_CBET_DECISION',
-            flopArchetype: flopArch, boardArchetype: flopArch,
-            turnFamily: turnFamily, heroHandClass: turnHandCls,
-            flopHandClass: classifyFlopHand(heroHand, fc),
-            heroPos: fi.heroPos, villainPos: fi.villainPos,
-            flopCards: fc, flopClassification: classifyFlop(fc),
-            turnCard: turnCard, heroHand: heroHand,
-            heroCards: heroHand.cards, // convenience alias: concrete [{rank,suit},{rank,suit}]
-            turnTexture: turnTexture,
+            potType: 'SRP', preflopFamily: fs.preflopFamily, street: 'TURN', heroRole: 'PFR',
+            positionState: fs.positionState, nodeType: 'TURN_DELAYED_CBET_DECISION',
+            flopArchetype: fs.flopArch, boardArchetype: fs.flopArch,
+            turnFamily: ts.turnFamily, heroHandClass: ts.turnHandCls,
+            flopHandClass: fs.flopHandClass,
+            heroPos: fs.heroPos, villainPos: fs.villainPos,
+            flopCards: fs.flopCards, flopClassification: fs.flopClassification,
+            turnCard: ts.turnCard, turnBoard: ts.turnBoard,
+            heroHand: fs.heroHand, heroCards: fs.heroCards,
+            turnTexture: ts.turnTexture,
+            // Action line inherited from flop state: flop was checked through
             actionHistory: ['FLOP_CHECK', 'FLOP_CHECK_BACK'],
             potSize: null, effectiveStack: 200
         };
         spot.spotKey = makeDelayedTurnSpotKeyV1(spot);
         const baseStrat = POSTFLOP_TURN_DELAYED_STRATEGY[spot.spotKey] || null;
-        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, turnHandCls, turnTexture, 'TURN_DELAYED_CBET_DECISION') || baseStrat;
+        spot.strategy = _enrichTurnBarrelStrategy(baseStrat, ts.turnHandCls, ts.turnTexture, 'TURN_DELAYED_CBET_DECISION') || baseStrat;
 
         if (spot.strategy && spot.heroHand && spot.heroHandClass) return spot;
     }
 
-    // Fallback
+    // Last-resort fallback — still uses the same two-step pattern
     console.warn('[TurnDelayed] Retries exhausted; forcing BTN_vs_BB fallback.');
-    const fi   = POSTFLOP_PREFLOP_FAMILIES['BTN_vs_BB'];
-    const heroHand = _dealPostflopHeroHand('BTN');
-    const fc   = _generateFlopNoConflict('A_HIGH_DRY', heroHand);
-    const turnCard   = _dealTurnCard(fc, heroHand);
-    const turnFamily = classifyTurnCard(turnCard, fc);
-    const turnTextureFB = classifyTurnTexture(fc, turnCard);
-    const turnHandClsFB = classifyTurnHand(heroHand, fc, turnCard);
+    const fsFB = _buildBaseFlopState('BTN_vs_BB', () => _dealPostflopHeroHand('BTN')) ||
+        { preflopFamily: 'BTN_vs_BB', positionState: 'IP', heroPos: 'BTN', villainPos: 'BB',
+          heroHand: _concreteHand('AK', true), flopArch: 'A_HIGH_DRY',
+          flopCards: _generateFlopNoConflict('A_HIGH_DRY', _concreteHand('AK', true)),
+          flopHandClass: 'AIR', flopClassification: {} };
+    fsFB.heroCards = fsFB.heroHand.cards;
+    const tsFB = _extendFlopStateToTurn(fsFB) ||
+        { turnCard: { rank: '2', suit: 'c' }, turnBoard: [...(fsFB.flopCards || []), { rank: '2', suit: 'c' }],
+          turnFamily: 'BRICK', turnHandCls: 'AIR', turnTexture: null };
     const spot = {
-        potType: 'SRP', preflopFamily: 'BTN_vs_BB', street: 'TURN', heroRole: 'PFR',
-        positionState: 'IP', nodeType: 'TURN_DELAYED_CBET_DECISION',
-        flopArchetype: 'A_HIGH_DRY', boardArchetype: 'A_HIGH_DRY',
-        turnFamily: turnFamily, heroHandClass: turnHandClsFB,
-        flopHandClass: classifyFlopHand(heroHand, fc),
-        heroPos: 'BTN', villainPos: 'BB',
-        flopCards: fc, flopClassification: classifyFlop(fc),
-        turnCard: turnCard, heroHand: heroHand,
-        heroCards: heroHand.cards, // convenience alias: concrete [{rank,suit},{rank,suit}]
-        turnTexture: turnTextureFB,
+        potType: 'SRP', preflopFamily: fsFB.preflopFamily, street: 'TURN', heroRole: 'PFR',
+        positionState: fsFB.positionState, nodeType: 'TURN_DELAYED_CBET_DECISION',
+        flopArchetype: fsFB.flopArch, boardArchetype: fsFB.flopArch,
+        turnFamily: tsFB.turnFamily, heroHandClass: tsFB.turnHandCls,
+        flopHandClass: fsFB.flopHandClass,
+        heroPos: fsFB.heroPos, villainPos: fsFB.villainPos,
+        flopCards: fsFB.flopCards, flopClassification: fsFB.flopClassification,
+        turnCard: tsFB.turnCard, turnBoard: tsFB.turnBoard,
+        heroHand: fsFB.heroHand, heroCards: fsFB.heroCards,
+        turnTexture: tsFB.turnTexture,
         actionHistory: ['FLOP_CHECK', 'FLOP_CHECK_BACK'], potSize: null, effectiveStack: 200
     };
     spot.spotKey = makeDelayedTurnSpotKeyV1(spot);
     const baseStratFB = POSTFLOP_TURN_DELAYED_STRATEGY[spot.spotKey] || null;
-    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, turnHandClsFB, turnTextureFB, 'TURN_DELAYED_CBET_DECISION') || baseStratFB;
+    spot.strategy = _enrichTurnBarrelStrategy(baseStratFB, tsFB.turnHandCls, tsFB.turnTexture, 'TURN_DELAYED_CBET_DECISION') || baseStratFB;
     return spot;
 }
 
