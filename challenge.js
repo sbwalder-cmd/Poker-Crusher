@@ -12,13 +12,14 @@ const CHALLENGE_TIERS = [
     { id: 'T3', name: 'Facing 3-Bets',        icon: '\u2694', color: 'purple' },
     { id: 'T4', name: 'Limper Trees',          icon: '\uD83C\uDF33', color: 'teal' },
     { id: 'T5', name: 'Squeeze Pressure',      icon: '\uD83D\uDCA5', color: 'orange' },
-    { id: 'T6', name: 'Flop C-Bet',            icon: '\uD83C\uDCCF', color: 'cyan' },
-    { id: 'T7', name: 'Integration Trials',    icon: '\uD83D\uDD25', color: 'rose' },
-    { id: 'T8', name: 'Boss',                  icon: '\uD83D\uDC51', color: 'amber' },
+    { id: 'T6', name: 'Postflop: Flop',        icon: '\uD83C\uDCCF', color: 'cyan' },
+    { id: 'T7', name: 'Postflop: Turn',        icon: '\uD83C\uDF00', color: 'sky' },
+    { id: 'T8', name: 'Integration Trials',    icon: '\uD83D\uDD25', color: 'rose' },
+    { id: 'T9', name: 'Boss',                  icon: '\uD83D\uDC51', color: 'amber' },
 ];
 
 // ============================================================
-// NODE DEFINITIONS — 24-node campaign
+// NODE DEFINITIONS — 30-node campaign
 // ============================================================
 const CHALLENGE_NODES = [
     // TIER 1 — Opening Fundamentals
@@ -150,7 +151,7 @@ const CHALLENGE_NODES = [
         prereqs: ['c16_squeeze_blinds'], tierGate: null,
     },
 
-    // TIER 6 — Postflop: Flop C-Bet
+    // TIER 6 — Postflop: Flop
     {
         id: 'c18_cbet_ip', tier: 'T6',
         title: 'C-Bet: IP vs BB', desc: 'BTN and CO c-bet vs BB',
@@ -172,35 +173,79 @@ const CHALLENGE_NODES = [
         hands: 30, thresholds: { pass: 68, silver: 78, gold: 86 },
         prereqs: ['c19_cbet_full'], tierGate: null,
     },
-
-    // TIER 7 — Integration Trials
     {
-        id: 'c21_fund_trial', tier: 'T7',
+        id: 'c20b_defend_ip', tier: 'T6',
+        title: 'Flop Defense: IP Spots', desc: 'BB defending vs BTN and CO c-bets',
+        filters: { scenarios: ['POSTFLOP_DEFEND'], heroPositions: [...ALL_POSITIONS], postflopFamilies: ['BTN_vs_BB', 'CO_vs_BB'] },
+        hands: 25, thresholds: { pass: 65, silver: 75, gold: 84 },
+        prereqs: ['c20_cbet_reads'], tierGate: null,
+    },
+    {
+        id: 'c20c_defend_full', tier: 'T6',
+        title: 'Flop Defense: Full', desc: 'BB defending vs all c-bet families',
+        filters: { scenarios: ['POSTFLOP_DEFEND'], heroPositions: [...ALL_POSITIONS] },
+        hands: 25, thresholds: { pass: 63, silver: 73, gold: 82 },
+        prereqs: ['c20b_defend_ip'], tierGate: null,
+    },
+
+    // TIER 7 — Postflop: Turn
+    {
+        id: 'c21_turn_barrel', tier: 'T7',
+        title: 'Turn Barrel: IP', desc: 'Firing the turn after a flop c-bet',
+        filters: { scenarios: ['POSTFLOP_TURN_CBET'], heroPositions: [...ALL_POSITIONS] },
+        hands: 25, thresholds: { pass: 65, silver: 75, gold: 84 },
+        prereqs: ['c20c_defend_full'], tierGate: 'T6',
+    },
+    {
+        id: 'c22_turn_defense', tier: 'T7',
+        title: 'Turn Defense: OOP', desc: 'Defending vs the turn barrel',
+        filters: { scenarios: ['POSTFLOP_TURN_DEFEND'], heroPositions: [...ALL_POSITIONS] },
+        hands: 25, thresholds: { pass: 63, silver: 73, gold: 82 },
+        prereqs: ['c21_turn_barrel'], tierGate: null,
+    },
+    {
+        id: 'c23_turn_delayed', tier: 'T7',
+        title: 'Delayed Turn Bet', desc: 'Betting turn after checking flop',
+        filters: { scenarios: ['POSTFLOP_TURN_DELAYED_CBET'], heroPositions: [...ALL_POSITIONS] },
+        hands: 25, thresholds: { pass: 63, silver: 73, gold: 82 },
+        prereqs: ['c22_turn_defense'], tierGate: null,
+    },
+    {
+        id: 'c23b_turn_mixed', tier: 'T7',
+        title: 'Turn Mixed: All Lines', desc: 'Barrel, defense, and delayed bet combined',
+        filters: { scenarios: ['POSTFLOP_TURN_CBET', 'POSTFLOP_TURN_DEFEND', 'POSTFLOP_TURN_DELAYED_CBET'], heroPositions: [...ALL_POSITIONS] },
+        hands: 30, thresholds: { pass: 63, silver: 73, gold: 82 },
+        prereqs: ['c23_turn_delayed'], tierGate: null,
+    },
+
+    // TIER 8 — Integration Trials
+    {
+        id: 'c21_fund_trial', tier: 'T8',
         title: 'Fundamentals Trial', desc: 'Opening + Defense — prove the basics',
         filters: { scenarios: ['RFI', 'FACING_RFI'], heroPositions: [...ALL_POSITIONS] },
         hands: 30, thresholds: { pass: 78, silver: 86, gold: 92 },
-        prereqs: ['c17_squeeze_2c'], tierGate: 'T6',
+        prereqs: ['c17_squeeze_2c'], tierGate: 'T7',
     },
     {
-        id: 'c22_pressure_trial', tier: 'T7',
+        id: 'c22_pressure_trial', tier: 'T8',
         title: 'Pressure Trial', desc: 'Squeeze + Limps under one roof',
         filters: { scenarios: ['SQUEEZE', 'SQUEEZE_2C', 'VS_LIMP'], heroPositions: [...ALL_POSITIONS] },
         hands: 30, thresholds: { pass: 75, silver: 83, gold: 90 },
         prereqs: ['c21_fund_trial'], tierGate: null,
     },
     {
-        id: 'c23_complete_trial', tier: 'T7',
-        title: 'Complete Game Trial', desc: 'All scenarios including postflop',
-        filters: { scenarios: ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C', 'POSTFLOP_CBET'], heroPositions: [...ALL_POSITIONS] },
-        hands: 40, thresholds: { pass: 75, silver: 83, gold: 90 },
+        id: 'c23_complete_trial', tier: 'T8',
+        title: 'Complete Game Trial', desc: 'All scenarios including flop + turn postflop',
+        filters: { scenarios: ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C', 'POSTFLOP_CBET', 'POSTFLOP_DEFEND', 'POSTFLOP_TURN_CBET', 'POSTFLOP_TURN_DEFEND', 'POSTFLOP_TURN_DELAYED_CBET'], heroPositions: [...ALL_POSITIONS] },
+        hands: 40, thresholds: { pass: 72, silver: 80, gold: 88 },
         prereqs: ['c22_pressure_trial'], tierGate: null,
     },
 
-    // TIER 8 — Boss
+    // TIER 9 — Boss
     {
-        id: 'c24_boss', tier: 'T8',
-        title: 'Poker Crusher Boss', desc: 'The ultimate preflop + postflop gauntlet',
-        filters: { scenarios: ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C', 'POSTFLOP_CBET'], heroPositions: [...ALL_POSITIONS] },
+        id: 'c24_boss', tier: 'T9',
+        title: 'Poker Crusher Boss', desc: 'The ultimate preflop + flop + turn gauntlet',
+        filters: { scenarios: ['RFI', 'FACING_RFI', 'RFI_VS_3BET', 'VS_LIMP', 'SQUEEZE', 'SQUEEZE_2C', 'POSTFLOP_CBET', 'POSTFLOP_DEFEND', 'POSTFLOP_TURN_CBET', 'POSTFLOP_TURN_DEFEND', 'POSTFLOP_TURN_DELAYED_CBET'], heroPositions: [...ALL_POSITIONS] },
         hands: 50, thresholds: { pass: 80, silver: 87, gold: 93 },
         prereqs: ['c23_complete_trial'], tierGate: null,
     },
@@ -322,6 +367,7 @@ const TIER_COLORS = {
     teal: { border: 'border-teal-500/30', bg: 'bg-teal-500/5', text: 'text-teal-400', headerBg: 'bg-teal-500/10' },
     orange: { border: 'border-orange-500/30', bg: 'bg-orange-500/5', text: 'text-orange-400', headerBg: 'bg-orange-500/10' },
     cyan: { border: 'border-cyan-500/30', bg: 'bg-cyan-500/5', text: 'text-cyan-400', headerBg: 'bg-cyan-500/10' },
+    sky: { border: 'border-sky-500/30', bg: 'bg-sky-500/5', text: 'text-sky-400', headerBg: 'bg-sky-500/10' },
     rose: { border: 'border-rose-500/30', bg: 'bg-rose-500/5', text: 'text-rose-400', headerBg: 'bg-rose-500/10' },
     amber: { border: 'border-amber-500/30', bg: 'bg-amber-500/5', text: 'text-amber-400', headerBg: 'bg-amber-500/10' },
 };
