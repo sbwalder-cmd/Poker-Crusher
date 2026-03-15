@@ -2102,13 +2102,19 @@ function drilldownSpot(spotKey) {
     function applyScale() {
         const root = document.documentElement.style;
         const main = document.getElementById('trainer-main');
-        const isMobile = feltW < 500;
-
-        // On mobile portrait, use window height as the reference for UI elements
-        // outside the felt (buttons, cards, header) since feltH is tiny (~170px)
         const winH = window.innerHeight;
         const winW = window.innerWidth;
         const isPortrait = winH > winW;
+        const isMobile = winW < 600;
+
+        // Cap table height on desktop so it doesn't consume the full screen
+        const tableWrapper = document.getElementById('table-wrapper');
+        if (tableWrapper) {
+            tableWrapper.style.maxHeight = isMobile ? '' : Math.round(winH * 0.52) + 'px';
+        }
+
+        // On mobile portrait, use window height as the reference for UI elements
+        // outside the felt (buttons, cards, header) since feltH is tiny (~170px)
         // Reference height for buttons/cards: window height on mobile portrait, feltH on desktop
         const refH = (isMobile && isPortrait) ? winH : feltH;
 
