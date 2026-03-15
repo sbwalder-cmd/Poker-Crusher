@@ -2141,8 +2141,8 @@ function drilldownSpot(spotKey) {
         root.setProperty('--toast-pad-y', Math.round(toastFont * 0.35) + 'px');
         root.setProperty('--toast-h', toastH + 'px');
         // Hero cards — larger on mobile
-        const cardScale = isMobile ? 0.14 : 0.1;
-        const cardHScale = isMobile ? 0.48 : 0.38;
+        const cardScale = isMobile ? 0.12 : 0.09;
+        const cardHScale = isMobile ? 0.42 : 0.35;
         const cardW = Math.max(40, Math.round(Math.min(feltW * cardScale, feltH * cardHScale)));
         const cardH = Math.round(cardW * 1.5);
         root.setProperty('--hero-card-w', cardW + 'px');
@@ -2159,7 +2159,7 @@ function drilldownSpot(spotKey) {
         root.setProperty('--cc-rank-size', Math.round(ccW * 0.4) + 'px');
         root.setProperty('--cc-suit-size', Math.round(ccW * 0.32) + 'px');
         // Action buttons — bigger tap targets on mobile
-        const btnPad = Math.max(12, Math.round(feltH * (isMobile ? 0.08 : 0.06)));
+        const btnPad = Math.max(11, Math.round(feltH * (isMobile ? 0.065 : 0.052)));
         const btnFont = Math.max(13, Math.round(feltW * (isMobile ? 0.034 : 0.022)));
         root.setProperty('--btn-pad', btnPad + 'px');
         root.setProperty('--btn-font', btnFont + 'px');
