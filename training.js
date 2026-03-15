@@ -1264,8 +1264,8 @@ function showDrillComplete() {
         </div>
 
         <div class="flex flex-col gap-3 w-full mt-2">
-            <button onclick="continueDrill()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-black text-lg transition-all">Keep Going</button>
-            <button onclick="closeDrillComplete()" class="w-full py-4 bg-slate-900 border border-slate-800 rounded-2xl font-bold text-sm text-slate-500">Done</button>
+            <button onclick="continueDrill()" class="w-full py-4 pc-btn-primary transition-all">Keep Going</button>
+            <button onclick="closeDrillComplete()" class="w-full py-4 pc-btn-utility font-bold text-sm">Done</button>
         </div>`;
 
     document.getElementById('drill-complete-body').innerHTML = html;
@@ -1385,7 +1385,7 @@ function renderLibrary() {
     // Update category tab styles
     ['RFI','FACING_RFI','RFI_VS_3BET','VS_LIMP','SQUEEZE','SQUEEZE_2C','POSTFLOP'].forEach(tab => {
         const btn = document.getElementById(`lib-tab-${tab}`);
-        if (btn) btn.className = `whitespace-nowrap px-4 py-1.5 rounded-full font-bold text-xs ${cat === tab ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'}`;
+        if (btn) btn.className = `pc-chip pc-chip-sm ${cat === tab ? 'active' : ''}`;
     });
 
     // Hide/show preflop vs postflop rows
@@ -1422,7 +1422,7 @@ function renderLibrary() {
 
     heroRow.innerHTML = heroes.map(h => {
         const active = h === libSel.heroPos;
-        return `<button onclick="setLibHero('${h}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${POS_LABELS[h] || h}</button>`;
+        return `<button onclick="setLibHero('${h}')" class="pc-chip pc-chip-sm transition-all ${active ? 'active' : ''}">${POS_LABELS[h] || h}</button>`;
     }).join('');
 
     // Opponent row (hidden for RFI which has no opponent)
@@ -1439,7 +1439,7 @@ function renderLibrary() {
             const active = o === libSel.oppPos;
             const spot = heroSpots.find(s => s.opp === o);
             const label = spot && spot.label ? spot.label : (POS_LABELS[o] || o);
-            return `<button onclick="setLibOpp('${o}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${label}</button>`;
+            return `<button onclick="setLibOpp('${o}')" class="pc-chip pc-chip-sm transition-all ${active ? 'active' : ''}">${label}</button>`;
         }).join('');
     }
 
@@ -1448,7 +1448,7 @@ function renderLibrary() {
         bucketRow.classList.remove('hidden');
         bucketRow.innerHTML = [['1L','1 Limper'],['2L','2 Limpers'],['3P','3+ Limpers']].map(([b, lab]) => {
             const active = libSel.bucket === b;
-            return `<button onclick="setLibBucket('${b}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-orange-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${lab}</button>`;
+            return `<button onclick="setLibBucket('${b}')" class="pc-chip pc-chip-sm transition-all ${active ? 'active' : ''}">${lab}</button>`;
         }).join('');
     } else {
         bucketRow.classList.add('hidden');
@@ -1593,7 +1593,7 @@ function renderPostflopLibraryControls() {
     pfPosRow.innerHTML = ['IP','OOP'].map(ps => {
         const active = libSel.pfPosState === ps;
         const label = ps === 'IP' ? 'In Position' : 'Out of Position';
-        return `<button onclick="setLibPostflopPosState('${ps}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${label}</button>`;
+        return `<button onclick="setLibPostflopPosState('${ps}')" class="pc-chip pc-chip-sm transition-all ${active ? 'active' : ''}">${label}</button>`;
     }).join('');
 
     // Family pills
@@ -1601,7 +1601,7 @@ function renderPostflopLibraryControls() {
     if (!families.includes(libSel.pfFamily)) libSel.pfFamily = families[0] || 'BTN_vs_BB';
     pfFamRow.innerHTML = families.map(fam => {
         const active = libSel.pfFamily === fam;
-        return `<button onclick="setLibPostflopFamily('${fam}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${_pfFamilyLabel(fam)}</button>`;
+        return `<button onclick="setLibPostflopFamily('${fam}')" class="pc-chip pc-chip-sm transition-all ${active ? 'active' : ''}">${_pfFamilyLabel(fam)}</button>`;
     }).join('');
 
     // View mode pills
@@ -1609,7 +1609,7 @@ function renderPostflopLibraryControls() {
     pfViewRow.innerHTML = ['Overview','Matrix','Archetypes'].map(v => {
         const active = libSel.pfView === v;
         const disabled = v === 'Matrix' && !isV2;
-        return `<button onclick="setLibPostflopView('${v}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[11px] transition-all ${active ? 'bg-amber-600 text-white' : disabled ? 'bg-slate-900 text-slate-600 cursor-not-allowed' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}" ${disabled ? 'disabled' : ''}>${v}</button>`;
+        return `<button onclick="setLibPostflopView('${v}')" class="pc-chip pc-chip-sm transition-all ${active ? 'active' : disabled ? 'opacity-30 cursor-not-allowed' : ''}" ${disabled ? 'disabled' : ''}>${v}</button>`;
     }).join('');
 }
 
@@ -1705,9 +1705,9 @@ function renderPostflopOverview(area, fam, fi) {
     // 5. Study CTA footer
     html += `<div class="w-full max-w-md flex flex-col gap-2">`;
     if (isV2) {
-        html += `<button onclick="setLibPostflopView('Matrix')" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl font-black text-xs uppercase tracking-widest transition-all">Open hand-class matrix</button>`;
+        html += `<button onclick="setLibPostflopView('Matrix')" class="w-full py-3 pc-btn-aggressive transition-all" style="border-radius:14px;font-size:12px;font-weight:900;letter-spacing:.05em;">Open hand-class matrix</button>`;
     }
-    html += `<button onclick="setLibPostflopView('Archetypes')" class="w-full py-3 bg-slate-800 border border-slate-700 hover:border-slate-500 rounded-xl font-black text-xs uppercase tracking-widest text-slate-200 transition-all">Study board textures</button>`;
+    html += `<button onclick="setLibPostflopView('Archetypes')" class="w-full py-3 pc-btn-utility transition-all" style="font-size:12px;font-weight:900;letter-spacing:.05em;">Study board textures</button>`;
     html += `</div>`;
 
     area.innerHTML = html;
@@ -1860,7 +1860,7 @@ function renderPostflopArchetypes(area, fam, fi) {
     for (const a of FLOP_ARCHETYPES) {
         const active = a === arch;
         const label = ARCHETYPE_LABELS[a] || a;
-        html += `<button onclick="setLibPostflopArchetype('${a}')" class="whitespace-nowrap px-3 py-1 rounded-full font-black text-[10px] transition-all ${active ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${label}</button>`;
+        html += `<button onclick="setLibPostflopArchetype('${a}')" class="pc-chip pc-chip-sm transition-all ${active ? 'active' : ''}">${label}</button>`;
     }
     html += `</div>`;
 
@@ -2034,7 +2034,7 @@ function renderLibraryChart() {
             ${legendHtml}
             <div class="range-grid w-full gap-[1px]" style="grid-template-columns: repeat(13,1fr);">${grid}</div>
             ${counts}
-            <button onclick="zoomSpot('${spot.hero}','${cat === 'SQUEEZE' || cat === 'SQUEEZE_2C' ? spot.key : (spot.opp||'')}','${cat}',null)" class="mt-1 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-black text-xs uppercase tracking-widest transition-all">Full View</button>
+            <button onclick="zoomSpot('${spot.hero}','${cat === 'SQUEEZE' || cat === 'SQUEEZE_2C' ? spot.key : (spot.opp||'')}','${cat}',null)" class="mt-1 px-5 py-2.5 pc-btn-aggressive transition-all" style="border-radius:12px;font-size:11px;font-weight:900;letter-spacing:.05em;">Full View</button>
         </div>
     `;
 }
@@ -3020,7 +3020,7 @@ function renderPostflopButtons(hidden){
     setSizingHint('');
     const sc=hidden?'action-buttons-hidden':'action-buttons-revealed';
     const bs=`style="padding:var(--btn-pad, 14px) 0;font-size:var(--btn-font, 14px);"`;
-    container.innerHTML=`<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handlePostflopInput('CHECK')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">CHECK</button><button onclick="handlePostflopInput('CBET')" ${bs} class="bg-orange-600 rounded-2xl font-black text-white shadow-lg">C-BET</button></div>`;
+    container.innerHTML=`<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handlePostflopInput('CHECK')" ${bs} class="pc-btn pc-btn-passive">CHECK</button><button onclick="handlePostflopInput('CBET')" ${bs} class="pc-btn pc-btn-aggressive">C-BET</button></div>`;
 }
 
 function renderDefenderButtons(hidden){
@@ -3028,7 +3028,7 @@ function renderDefenderButtons(hidden){
     setSizingHint('');
     const sc=hidden?'action-buttons-hidden':'action-buttons-revealed';
     const bs=`style="padding:var(--btn-pad, 14px) 0;font-size:var(--btn-font, 14px);"`;
-    container.innerHTML=`<div class="grid grid-cols-3 gap-2 ${sc}"><button onclick="handleDefenderInput('fold')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button><button onclick="handleDefenderInput('call')" ${bs} class="bg-emerald-600 rounded-2xl font-black text-white shadow-lg">CALL</button><button onclick="handleDefenderInput('raise')" ${bs} class="bg-red-600 rounded-2xl font-black text-white shadow-lg">RAISE</button></div>`;
+    container.innerHTML=`<div class="grid grid-cols-3 gap-2 ${sc}"><button onclick="handleDefenderInput('fold')" ${bs} class="pc-btn pc-btn-fold">FOLD</button><button onclick="handleDefenderInput('call')" ${bs} class="pc-btn pc-btn-passive">CALL</button><button onclick="handleDefenderInput('raise')" ${bs} class="pc-btn pc-btn-aggressive">RAISE</button></div>`;
 }
 
 function handleDefenderInput(action){
@@ -3353,7 +3353,7 @@ function renderTurnCBetButtons(hidden) {
     setSizingHint('');
     const sc = hidden ? 'action-buttons-hidden' : 'action-buttons-revealed';
     const bs = `style="padding:var(--btn-pad, 14px) 0;font-size:var(--btn-font, 14px);"`;
-    container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handleTurnCBetInput('CHECK')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">CHECK</button><button onclick="handleTurnCBetInput('BARREL')" ${bs} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">BARREL (50%)</button></div>`;
+    container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handleTurnCBetInput('CHECK')" ${bs} class="pc-btn pc-btn-passive">CHECK</button><button onclick="handleTurnCBetInput('BARREL')" ${bs} class="pc-btn pc-btn-aggressive">BARREL (50%)</button></div>`;
 }
 
 function renderTurnDefenderButtons(hidden) {
@@ -3361,7 +3361,7 @@ function renderTurnDefenderButtons(hidden) {
     setSizingHint('');
     const sc = hidden ? 'action-buttons-hidden' : 'action-buttons-revealed';
     const bs = `style="padding:var(--btn-pad, 14px) 0;font-size:var(--btn-font, 14px);"`;
-    container.innerHTML = `<div class="grid grid-cols-3 gap-2 ${sc}"><button onclick="handleTurnDefenderInput('fold')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button><button onclick="handleTurnDefenderInput('call')" ${bs} class="bg-emerald-600 rounded-2xl font-black text-white shadow-lg">CALL</button><button onclick="handleTurnDefenderInput('raise')" ${bs} class="bg-red-600 rounded-2xl font-black text-white shadow-lg">RAISE</button></div>`;
+    container.innerHTML = `<div class="grid grid-cols-3 gap-2 ${sc}"><button onclick="handleTurnDefenderInput('fold')" ${bs} class="pc-btn pc-btn-fold">FOLD</button><button onclick="handleTurnDefenderInput('call')" ${bs} class="pc-btn pc-btn-passive">CALL</button><button onclick="handleTurnDefenderInput('raise')" ${bs} class="pc-btn pc-btn-aggressive">RAISE</button></div>`;
 }
 
 function handleTurnCBetInput(action) {
@@ -3613,7 +3613,7 @@ function renderDelayedTurnButtons(hidden) {
     setSizingHint('');
     const sc = hidden ? 'action-buttons-hidden' : 'action-buttons-revealed';
     const bs = `style="padding:var(--btn-pad, 14px) 0;font-size:var(--btn-font, 14px);"`;
-    container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handleDelayedTurnInput('CHECK')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">CHECK</button><button onclick="handleDelayedTurnInput('BET')" ${bs} class="bg-violet-600 rounded-2xl font-black text-white shadow-lg">BET (50%)</button></div>`;
+    container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handleDelayedTurnInput('CHECK')" ${bs} class="pc-btn pc-btn-passive">CHECK</button><button onclick="handleDelayedTurnInput('BET')" ${bs} class="pc-btn pc-btn-aggressive">BET (50%)</button></div>`;
 }
 
 function handleDelayedTurnInput(action) {
@@ -3747,7 +3747,7 @@ function renderTurnProbeButtons(hidden) {
     setSizingHint('');
     const sc = hidden ? 'action-buttons-hidden' : 'action-buttons-revealed';
     const bs = `style="padding:var(--btn-pad, 14px) 0;font-size:var(--btn-font, 14px);"`;
-    container.innerHTML = `<div class="grid grid-cols-3 gap-2 ${sc}"><button onclick="handleTurnProbeInput('fold')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button><button onclick="handleTurnProbeInput('call')" ${bs} class="bg-emerald-600 rounded-2xl font-black text-white shadow-lg">CALL</button><button onclick="handleTurnProbeInput('raise')" ${bs} class="bg-red-600 rounded-2xl font-black text-white shadow-lg">RAISE</button></div>`;
+    container.innerHTML = `<div class="grid grid-cols-3 gap-2 ${sc}"><button onclick="handleTurnProbeInput('fold')" ${bs} class="pc-btn pc-btn-fold">FOLD</button><button onclick="handleTurnProbeInput('call')" ${bs} class="pc-btn pc-btn-passive">CALL</button><button onclick="handleTurnProbeInput('raise')" ${bs} class="pc-btn pc-btn-aggressive">RAISE</button></div>`;
 }
 
 function handleTurnProbeInput(action) {
@@ -3882,7 +3882,7 @@ function renderTurnProbeDefendButtons(hidden) {
     setSizingHint('');
     const sc = hidden ? 'action-buttons-hidden' : 'action-buttons-revealed';
     const bs = `style="padding:var(--btn-pad, 14px) 0;font-size:var(--btn-font, 14px);"`;
-    container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handleTurnProbeDefendInput('CHECK')" ${bs} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">CHECK</button><button onclick="handleTurnProbeDefendInput('BET')" ${bs} class="bg-teal-600 rounded-2xl font-black text-white shadow-lg">PROBE (33%)</button></div>`;
+    container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${sc}"><button onclick="handleTurnProbeDefendInput('CHECK')" ${bs} class="pc-btn pc-btn-passive">CHECK</button><button onclick="handleTurnProbeDefendInput('BET')" ${bs} class="pc-btn pc-btn-aggressive">PROBE (33%)</button></div>`;
 }
 
 function handleTurnProbeDefendInput(action) {
