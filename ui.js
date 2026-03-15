@@ -2182,9 +2182,9 @@ function drilldownSpot(spotKey) {
         root.setProperty('--btn-pad', btnPad + 'px');
         root.setProperty('--btn-font', btnFont + 'px');
         root.setProperty('--btn-max-w', Math.min(640, Math.round(feltW * 0.95)) + 'px');
-        // Felt border — guard write to avoid triggering layout recalc loop
+        // Felt border + aspect ratio — guard writes to avoid triggering layout recalc loop
         const feltBorder = Math.max(6, Math.round(feltW * 0.016)) + 'px';
-        const targetRatio = isMobile ? '2.3/1' : '2.1/1';
+        const targetRatio = isMobile ? '2.8/1' : '2.1/1';
         const feltEl = document.getElementById('poker-felt-container');
         if (feltEl) {
             if (feltEl.style.borderWidth !== feltBorder) feltEl.style.borderWidth = feltBorder;
@@ -2198,8 +2198,7 @@ function drilldownSpot(spotKey) {
             const wW = entry.contentRect.width;
             const wH = entry.contentRect.height;
             // Compute felt dimensions from wrapper size + aspect ratio
-            // (felt is height-driven inside the wrapper)
-            const ratio = (window.innerWidth < 600) ? 2.3 : 2.1;
+            const ratio = (window.innerWidth < 600) ? 2.8 : 2.1;
             feltW = Math.min(wW, wH * ratio);
             feltH = feltW / ratio;
         }
