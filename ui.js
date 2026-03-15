@@ -956,8 +956,8 @@ const raiseMain = `RAISE TO ${formatAmt(open$)}`;
 const raiseHint = `Open: ${openBB.toFixed(0)}bb`;
 setSizingHint(raiseHint);
 container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('RAISE')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">${raiseMain}</button>
+    <button onclick="handleInput('FOLD')" ${btnStyle} class="pc-btn pc-btn-fold">FOLD</button>
+    <button onclick="handleInput('RAISE')" ${btnStyle} class="pc-btn pc-btn-aggressive">${raiseMain}</button>
 </div>`;
 } else if (state.scenario === 'FACING_RFI') {
 const villainOpen$ = getVillainOpenSize$();
@@ -967,9 +967,9 @@ const threeMain = `3-BET TO ${formatAmt(threeBet$)}`;
 const threeHint = isIP ? `IP 3-bet: 3× open (${formatAmt(villainOpen$)})` : `OOP 3-bet: 4× open (${formatAmt(villainOpen$)})`;
 setSizingHint(threeHint);
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
-    <button onclick="handleInput('3BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">${threeMain}</button>
+    <button onclick="handleInput('FOLD')" ${btnStyle} class="pc-btn pc-btn-fold">FOLD</button>
+    <button onclick="handleInput('CALL')" ${btnStyle} class="pc-btn pc-btn-passive">CALL</button>
+    <button onclick="handleInput('3BET')" ${btnStyle} class="pc-btn pc-btn-aggressive">${threeMain}</button>
 </div>`;
 } else if (state.scenario === 'VS_LIMP') {
 const isBB = state.currentPos === 'BB';
@@ -985,9 +985,9 @@ const isoHint = `Iso: 5bb + 1bb/limper (${limpers} limper${limpers===1?'':'s'})`
 setSizingHint(isoHint);
 
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
-    <button onclick="handleInput('${isBB ? 'OVERLIMP' : 'FOLD'}')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">${isBB ? 'CHECK' : 'FOLD'}</button>
-    ${isBB ? '' : `<button onclick="handleInput('OVERLIMP')" ${btnStyle} class="bg-cyan-700 rounded-2xl font-black text-white shadow-lg">${passiveLabel}</button>`}
-    <button onclick="handleInput('${raiseAction}')" ${btnStyle} class="bg-orange-600 rounded-2xl font-black text-white shadow-lg ${isBB ? 'col-span-2' : ''}">${isoMain}</button>
+    <button onclick="handleInput('${isBB ? 'OVERLIMP' : 'FOLD'}')" ${btnStyle} class="pc-btn pc-btn-fold">${isBB ? 'CHECK' : 'FOLD'}</button>
+    ${isBB ? '' : `<button onclick="handleInput('OVERLIMP')" ${btnStyle} class="pc-btn pc-btn-passive">${passiveLabel}</button>`}
+    <button onclick="handleInput('${raiseAction}')" ${btnStyle} class="pc-btn pc-btn-aggressive ${isBB ? 'col-span-2' : ''}">${isoMain}</button>
 </div>`;
 } else if (state.scenario === 'SQUEEZE' || state.scenario === 'SQUEEZE_2C') {
 const callers = (state.scenario === 'SQUEEZE_2C') ? 2 : 1;
@@ -1000,9 +1000,9 @@ const hint = isIP ? `IP squeeze: 3.5× + 1×/caller off ${formatAmt(villainOpen$
 setSizingHint(hint);
 
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
-    <button onclick="handleInput('SQUEEZE')" ${btnStyle} class="bg-red-600 rounded-2xl font-black text-white shadow-lg">${main}</button>
+    <button onclick="handleInput('FOLD')" ${btnStyle} class="pc-btn pc-btn-fold">FOLD</button>
+    <button onclick="handleInput('CALL')" ${btnStyle} class="pc-btn pc-btn-passive">CALL</button>
+    <button onclick="handleInput('SQUEEZE')" ${btnStyle} class="pc-btn pc-btn-squeeze">${main}</button>
 </div>`;
 
 } else if (state.scenario === 'RFI_VS_3BET' || state.scenario === 'RFI_VS_3') {
@@ -1013,22 +1013,22 @@ const hint = heroIP ? `IP 4-bet: 2.2× 3-bet (${formatAmt(threeBet$)})` : `OOP 4
 setSizingHint(hint);
 
 container.innerHTML = `<div class="grid grid-cols-3 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('CALL')" ${btnStyle} class="bg-emerald-700 rounded-2xl font-black text-white shadow-lg">CALL</button>
-    <button onclick="handleInput('4BET')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">4-BET TO ${formatAmt(fourBet$)}</button>
+    <button onclick="handleInput('FOLD')" ${btnStyle} class="pc-btn pc-btn-fold">FOLD</button>
+    <button onclick="handleInput('CALL')" ${btnStyle} class="pc-btn pc-btn-passive">CALL</button>
+    <button onclick="handleInput('4BET')" ${btnStyle} class="pc-btn pc-btn-aggressive">4-BET TO ${formatAmt(fourBet$)}</button>
 </div>`;
 
 } else if (state.scenario === 'PUSH_FOLD') {
 const shove$ = (state.stackBB || 10) * getBigBlind$();
 setSizingHint(`Shoving ${state.stackBB}BB (${formatAmt(shove$)})`);
 container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('SHOVE')" ${btnStyle} class="bg-rose-600 rounded-2xl font-black text-white shadow-lg">ALL IN</button>
+    <button onclick="handleInput('FOLD')" ${btnStyle} class="pc-btn pc-btn-fold">FOLD</button>
+    <button onclick="handleInput('SHOVE')" ${btnStyle} class="pc-btn pc-btn-shove">ALL IN</button>
 </div>`;
 } else {
 container.innerHTML = `<div class="grid grid-cols-2 gap-3 ${stateClass}">
-    <button onclick="handleInput('FOLD')" ${btnStyle} class="bg-slate-800 border border-slate-600 rounded-2xl font-black text-slate-300">FOLD</button>
-    <button onclick="handleInput('RAISE')" ${btnStyle} class="bg-indigo-600 rounded-2xl font-black text-white shadow-lg">RAISE</button>
+    <button onclick="handleInput('FOLD')" ${btnStyle} class="pc-btn pc-btn-fold">FOLD</button>
+    <button onclick="handleInput('RAISE')" ${btnStyle} class="pc-btn pc-btn-aggressive">RAISE</button>
 </div>`;
 }
 }
@@ -1227,7 +1227,7 @@ const why = getWhyText(target, correctAction, scenario, pos, effOpp);
         bucketToggle.classList.remove('hidden');
         bucketToggle.innerHTML = buckets.map(b => {
             const sel = b === _chartCtx.bucket;
-            return `<button onclick="switchChartBucket('${b}')" class="px-3 py-1 rounded-full text-[9px] font-bold transition-all ${sel ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'}">${labels[b]}</button>`;
+            return `<button onclick="switchChartBucket('${b}')" class="pc-chip pc-chip-sm ${sel ? 'active' : ''}">${labels[b]}</button>`;
         }).join('');
     } else {
         bucketToggle.classList.add('hidden');
@@ -2018,7 +2018,7 @@ function drilldownSpot(spotKey) {
         // Run This Spot CTA
         const escapedKey = spotKey.replace(/'/g, "\\'");
         const runBtn = `<button onclick="launchSpotDrill('${escapedKey}')"
-            class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-2xl font-black text-white text-sm transition-all flex items-center justify-center gap-2">
+            class="w-full py-3.5 pc-btn-primary transition-all flex items-center justify-center gap-2" style="font-size:14px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             Run This Spot
             <span class="text-indigo-300 font-semibold text-xs ml-1">· 25 hands</span>
