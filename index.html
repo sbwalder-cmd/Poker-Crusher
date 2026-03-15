@@ -523,7 +523,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 h-[100dvh] flex flex-col items-center overflow-hidden font-sans">
     <div id="miss-flash-overlay"></div>
-    <div id="toast-container" class="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex justify-center pointer-events-none px-4"></div>
+    <div id="toast-container" class="fixed left-1/2 -translate-x-1/2 z-[200] flex justify-center pointer-events-none px-4" style="top: var(--toast-top, 16px);"></div>
 
     <!-- MENU SCREEN -->
     <div id="menu-screen" class="w-full max-w-md p-6 flex flex-col items-center justify-center h-full gap-5 text-center z-10">
@@ -903,31 +903,31 @@
     <!-- TRAINER SCREEN -->
     <div id="trainer-screen" class="hidden w-full flex flex-col items-center" style="height:100dvh;overflow:hidden;">
         <!-- Header -->
-        <div class="w-full flex justify-between items-center bg-slate-900/30 border-b border-white/5 shrink-0 z-30" style="padding: clamp(6px,1.5vh,14px) clamp(10px,2vw,24px); max-width: 1200px; margin: 0 auto;">
-            <button onclick="confirmExit()" class="text-slate-400 font-bold uppercase tracking-widest hover:text-white bg-slate-800 rounded-lg" style="font-size:clamp(8px,1.2vh,11px);padding:clamp(4px,0.8vh,8px) clamp(8px,1.2vw,14px);">Exit</button>
+        <div id="trainer-header" class="w-full flex justify-between items-center bg-slate-900/30 border-b border-white/5 shrink-0 z-30" style="padding: clamp(8px,1.5vh,14px) clamp(10px,2vw,24px); max-width: 1200px; margin: 0 auto;">
+            <button onclick="confirmExit()" class="text-slate-400 font-bold uppercase tracking-widest hover:text-white bg-slate-800 rounded-lg" style="font-size:clamp(10px,1.4vh,13px);padding:clamp(6px,1vh,10px) clamp(10px,1.4vw,16px);">Exit</button>
             <div class="flex gap-6">
                 <div id="drill-counter" class="hidden text-right">
-                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Hands</p>
-                    <p id="drill-progress" class="font-black text-indigo-400" style="font-size:clamp(14px,2.5vh,22px);">0/25</p>
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(9px,1.1vh,12px);margin-bottom:2px;">Hands</p>
+                    <p id="drill-progress" class="font-black text-indigo-400" style="font-size:clamp(18px,2.5vh,26px);">0/25</p>
                 </div>
                 <div id="dr-round-counter" class="hidden text-right">
-                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Round</p>
-                    <p id="dr-round-num" class="font-black text-orange-400" style="font-size:clamp(14px,2.5vh,22px);">1</p>
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(9px,1.1vh,12px);margin-bottom:2px;">Round</p>
+                    <p id="dr-round-num" class="font-black text-orange-400" style="font-size:clamp(18px,2.5vh,26px);">1</p>
                 </div>
                 <div class="text-right">
-                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Accuracy</p>
-                    <p id="accuracy" class="font-black" style="font-size:clamp(14px,2.5vh,22px);">0%</p>
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(9px,1.1vh,12px);margin-bottom:2px;">Accuracy</p>
+                    <p id="accuracy" class="font-black" style="font-size:clamp(18px,2.5vh,26px);">0%</p>
                 </div>
                 <div class="text-right">
-                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Streak</p>
-                    <p id="streak" class="font-black text-orange-400" style="font-size:clamp(14px,2.5vh,22px);">0</p>
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(9px,1.1vh,12px);margin-bottom:2px;">Streak</p>
+                    <p id="streak" class="font-black text-orange-400" style="font-size:clamp(18px,2.5vh,26px);">0</p>
                 </div>
                 <div id="streak-best-block" class="hidden text-right">
-                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(7px,1vh,10px);margin-bottom:2px;">Best</p>
-                    <p id="streak-best" class="font-black text-slate-500" style="font-size:clamp(14px,2.5vh,22px);">0</p>
+                    <p class="text-slate-500 font-bold uppercase" style="font-size:clamp(9px,1.1vh,12px);margin-bottom:2px;">Best</p>
+                    <p id="streak-best" class="font-black text-slate-500" style="font-size:clamp(18px,2.5vh,26px);">0</p>
                 </div>
-                <button onclick="showSessionLog()" class="text-slate-400 font-bold uppercase tracking-widest hover:text-white bg-slate-800 rounded-lg flex items-center gap-1" style="font-size:clamp(8px,1.2vh,11px);padding:clamp(4px,0.8vh,8px) clamp(8px,1.2vw,14px);">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M9 8h6"/><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                <button onclick="showSessionLog()" class="text-slate-400 font-bold uppercase tracking-widest hover:text-white bg-slate-800 rounded-lg flex items-center gap-1" style="font-size:clamp(10px,1.4vh,13px);padding:clamp(6px,1vh,10px) clamp(10px,1.4vw,16px);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M9 8h6"/><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
                     LOG
                 </button>
             </div>
@@ -947,8 +947,8 @@
             <div id="turn-context-line" class="hidden shrink-0 w-full text-center" style="line-height:1.5; min-height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center;"></div>
 
             <!-- Poker table — uses container-aware sizing -->
-            <div id="table-wrapper" class="w-full shrink min-h-0 flex items-center justify-center" style="flex: 1.4 1 0;">
-                <div id="poker-felt-container" class="poker-felt relative flex items-center justify-center" style="width:100%; aspect-ratio:2.1/1; max-height:100%;">
+            <div id="table-wrapper" class="w-full shrink-0 flex items-center justify-center">
+                <div id="poker-felt-container" class="poker-felt relative flex items-center justify-center" style="width:100%; aspect-ratio:2.1/1;">
                     <div id="dealer-button" class="absolute bg-white rounded-full text-black font-black flex items-center justify-center translate-x-[-50%] translate-y-[-50%] z-40 transition-all duration-500" style="width:var(--dealer-size);height:var(--dealer-size);font-size:var(--dealer-font);">D</div>
                     <div id="bets-layer"></div>
                     <div id="cards-layer"></div>
