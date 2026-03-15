@@ -1675,7 +1675,7 @@ function formatSpotLabel(rawSpotId) {
     if (rawSpotId === '1L' || rawSpotId === '2L' || rawSpotId === '3P') return '';
     return POS_LABELS[clean] || clean;
 }
-const SCENARIO_SHORT = { RFI: 'RFI', FACING_RFI: 'vs RFI', RFI_VS_3BET: 'vs 3Bet', VS_LIMP: 'vs Limps', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push/Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet', POSTFLOP_TURN_CBET: 'Turn Barrel', POSTFLOP_TURN_DEFEND: 'Turn Defense', POSTFLOP_TURN_DELAYED_CBET: 'Turn Delayed' };
+const SCENARIO_SHORT = { RFI: 'RFI', FACING_RFI: 'vs RFI', RFI_VS_3BET: 'vs 3Bet', VS_LIMP: 'vs Limps', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push/Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet', POSTFLOP_TURN_CBET: 'Turn Barrel', POSTFLOP_TURN_DEFEND: 'Turn Defense', POSTFLOP_TURN_DELAYED_CBET: 'Turn Delayed', POSTFLOP_TURN_PROBE: 'Turn Probe', POSTFLOP_TURN_PROBE_DEFEND: 'Probe Bet' };
 const ACTION_LABELS = { FOLD: 'Fold', RAISE: 'Raise', CALL: 'Call', '3BET': '3-Bet', '4BET': '4-Bet', ISO: 'Iso Raise', OVERLIMP: 'Overlimp', SQUEEZE: 'Squeeze', SHOVE: 'Shove All-In', CHECK: 'Check', CBET: 'C-Bet' };
 
 function showSessionLog() {
@@ -1702,11 +1702,20 @@ function showSessionLog() {
             const resultColor = e.correct ? 'text-emerald-400' : 'text-rose-400';
             const actionLabel = ACTION_LABELS[e.action] || e.action;
             const correctLabel = e.isBluff ? 'Squeeze (Bluff)' : (ACTION_LABELS[e.correctAction] || e.correctAction);
+            // For postflop entries show hero hole cards; for preflop show hand string
+            let handDisplay = e.hand || '';
+            if (e.heroHand && e.heroHand.cards && e.heroHand.cards.length >= 2) {
+                const hc = e.heroHand.cards;
+                const suitColor = s => (s === 'h' || s === 'd') ? '#f87171' : '#94a3b8';
+                handDisplay = hc.slice(0, 2).map(c =>
+                    `<span style="color:${suitColor(c.suit)};font-weight:900;">${c.rank}${(SUIT_SYMBOLS && SUIT_SYMBOLS[c.suit]) || c.suit}</span>`
+                ).join('');
+            }
             return `<div class="bg-slate-800/60 rounded-xl px-3 py-2.5 ${resultClass} cursor-pointer hover:bg-slate-800 transition-colors" onclick="logRowChart(${idx})">
                 <div class="flex justify-between items-center">
                     <div class="flex items-center gap-2">
                         <span class="${resultColor} font-black text-sm">${resultIcon}</span>
-                        <span class="font-black text-sm text-white">${e.hand}</span>
+                        <span class="font-black text-sm text-white">${handDisplay}</span>
                         <span class="text-[10px] text-slate-400 font-bold">${SCENARIO_SHORT[e.scenario]} · ${spot}</span>
                     </div>
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
@@ -1726,7 +1735,8 @@ function logRowChart(idx) {
     // of the preflop range chart, which has no handler for postflop spots.
     if (e.scenario === 'POSTFLOP_CBET' || e.scenario === 'POSTFLOP_DEFEND' ||
         e.scenario === 'POSTFLOP_TURN_CBET' || e.scenario === 'POSTFLOP_TURN_DEFEND' ||
-        e.scenario === 'POSTFLOP_TURN_DELAYED_CBET') {
+        e.scenario === 'POSTFLOP_TURN_DELAYED_CBET' ||
+        e.scenario === 'POSTFLOP_TURN_PROBE' || e.scenario === 'POSTFLOP_TURN_PROBE_DEFEND') {
         hideSessionLog();
         const logSpot = {
             heroPos: e.pos,
@@ -1766,6 +1776,16 @@ function logRowChart(idx) {
             logSpot.turnFamily = e.turnFamily || null;
             logSpot.flopArchetype = e.archetype || '';
             showDelayedTurnFeedback(logSpot, logResult);
+        } else if (e.scenario === 'POSTFLOP_TURN_PROBE' && typeof showTurnProbeFeedback === 'function') {
+            logSpot.turnCard = e.turnCard || null;
+            logSpot.turnFamily = e.turnFamily || null;
+            logSpot.flopArchetype = e.archetype || '';
+            showTurnProbeFeedback(logSpot, logResult);
+        } else if (e.scenario === 'POSTFLOP_TURN_PROBE_DEFEND' && typeof showTurnProbeDefendFeedback === 'function') {
+            logSpot.turnCard = e.turnCard || null;
+            logSpot.turnFamily = e.turnFamily || null;
+            logSpot.flopArchetype = e.archetype || '';
+            showTurnProbeDefendFeedback(logSpot, logResult);
         } else {
             showPostflopFeedback(logSpot, logResult, e.correct);
         }
@@ -1789,7 +1809,7 @@ function showDrilldown(title, contentFn) {
 function hideDrilldown() { document.getElementById('drilldown-panel').classList.add('hidden'); }
 
 function drilldownScenario(sc) {
-    const SCENARIO_LABELS = { RFI: 'RFI (Unopened)', FACING_RFI: 'Defending vs RFI', RFI_VS_3BET: 'vs 3-Bet', VS_LIMP: 'Vs Limpers (1–3+)', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push / Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet', POSTFLOP_TURN_CBET: 'Turn Barrel', POSTFLOP_TURN_DEFEND: 'Turn Defense', POSTFLOP_TURN_DELAYED_CBET: 'Turn Delayed C-Bet' };
+    const SCENARIO_LABELS = { RFI: 'RFI (Unopened)', FACING_RFI: 'Defending vs RFI', RFI_VS_3BET: 'vs 3-Bet', VS_LIMP: 'Vs Limpers (1–3+)', SQUEEZE: 'Squeeze', SQUEEZE_2C: 'Squeeze vs 2C', PUSH_FOLD: 'Push / Fold', POSTFLOP_CBET: 'Flop C-Bet', POSTFLOP_DEFEND: 'vs C-Bet', POSTFLOP_TURN_CBET: 'Turn Barrel', POSTFLOP_TURN_DEFEND: 'Turn Defense', POSTFLOP_TURN_DELAYED_CBET: 'Turn Delayed C-Bet', POSTFLOP_TURN_PROBE: 'Turn Probe Defense', POSTFLOP_TURN_PROBE_DEFEND: 'Turn Probe Bet' };
 
     // Daily Run meta (UI only)
     const drm = loadDailyRunMeta();
