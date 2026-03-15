@@ -431,11 +431,11 @@ function renderChallengeScreen() {
             let btn;
             if (unlocked) {
                 const btnCls = passed
-                    ? 'bg-slate-900 border border-slate-800 text-slate-300'
-                    : 'bg-emerald-600 hover:bg-emerald-500 text-white';
-                btn = `<button onclick="startChallengeNode('${node.id}')" class="px-3 py-2 rounded-xl ${btnCls} text-xs font-black">${passed ? 'Replay' : 'Start'}</button>`;
+                    ? 'pc-btn-utility text-slate-300'
+                    : 'pc-btn-aggressive text-white';
+                btn = `<button onclick="startChallengeNode('${node.id}')" class="px-3 py-2 ${btnCls} text-xs font-black" style="border-radius:12px;">${passed ? 'Replay' : 'Start'}</button>`;
             } else {
-                btn = `<button disabled class="px-3 py-2 rounded-xl bg-slate-900 border border-slate-900 text-slate-700 text-xs font-black cursor-not-allowed">Locked</button>`;
+                btn = `<button disabled class="px-3 py-2 pc-btn-utility text-slate-700 text-xs font-black cursor-not-allowed opacity-40" style="border-radius:12px;">Locked</button>`;
             }
 
             // Threshold labels
@@ -682,9 +682,9 @@ function renderChallengeComplete(total, correct, accuracy) {
         </div>
 
         <div class="flex flex-col gap-3 w-full mt-2">
-            <button onclick="closeDrillComplete()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 rounded-2xl font-black text-lg transition-all">Back to Challenge</button>
-            <button onclick="retryChallenge()" class="w-full py-4 bg-slate-900 border border-slate-800 rounded-2xl font-black text-sm text-slate-300">Retry</button>
-            <button onclick="endChallengeToMenu()" class="w-full py-4 bg-slate-900 border border-slate-800 rounded-2xl font-bold text-sm text-slate-500">Main Menu</button>
+            <button onclick="closeDrillComplete()" class="w-full py-4 pc-btn-primary transition-all">Back to Challenge</button>
+            <button onclick="retryChallenge()" class="w-full py-4 pc-btn-utility font-black text-sm">Retry</button>
+            <button onclick="endChallengeToMenu()" class="w-full py-4 pc-btn-utility font-bold text-sm">Main Menu</button>
         </div>`;
 
     document.getElementById('drill-complete-body').innerHTML = html;
